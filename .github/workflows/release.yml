@@ -1,0 +1,26 @@
+name: Release DMG
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify standalone product
+        run: python3 scripts/verify_independence.py
+      - name: Build and verify DMG from the selected commit
+        run: scripts/release.sh --output-dir "$RUNNER_TEMP/HHVacancyCBR-release"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HHVacancyCBR-DMG
+          path: ${{ runner.temp }}/HHVacancyCBR-release/*
+          if-no-files-found: error
+          retention-days: 30
