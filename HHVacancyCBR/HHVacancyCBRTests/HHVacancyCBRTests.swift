@@ -50,7 +50,6 @@ final class HHVacancyCBRTests: XCTestCase {
                            salary: nil, alternateURL: nil, description: "Работа в полевом учреждении Банка России Инское"),
             isDetailLoaded: true)
         XCTAssertTrue(result.isFieldInstitution)
-        XCTAssertTrue(result.isTechnologyRelated)
         let favorite = FavoriteVacancyRecord(result: result, favoritedAt: Date(), updatedAt: Date())
         let restored = try JSONDecoder().decode(FavoriteVacancyRecord.self, from: JSONEncoder().encode(favorite))
         XCTAssertEqual(restored.searchResult.fieldInstitution, result.fieldInstitution)
@@ -134,157 +133,44 @@ final class HHVacancyCBRTests: XCTestCase {
         XCTAssertTrue(model.favorites[0].searchResult.isFieldInstitution)
     }
 
+    @MainActor
+    func testConfiguredEmployerRemainsSelectableWithZeroVacanciesAndOfflineSnapshot() async throws {
+        let directory = temporaryDirectory()
+        let client = EmployerScriptedClient(behaviors: ["47858": .vacancies(0), "1654251": .vacancies(1)])
+        let employers = TestEmployerStore(entries: [
+            .init(id: "47858", name: "Банк России", comment: "test"),
+            .init(id: "1654251", name: "НСПК", comment: "test")
+        ])
+        let snapshot = VacancySnapshotStore(fileURL: directory.appendingPathComponent("vacancies.json"))
+        let model = VacancySearchViewModel(apiClient: client, employerStore: employers,
+            areaStore: AreaDirectoryStore(fileURL: directory.appendingPathComponent("areas.json")), snapshotStore: snapshot)
+        await model.search()
+        XCTAssertEqual(model.results.count, 1)
+        XCTAssertNil(model.collectionWarning)
+        XCTAssertTrue(model.employerFilterOptions.contains(.init(id: "47858", title: "Банк России")))
+        model.selectedEmployerID = "47858"
+        XCTAssertTrue(model.displayedResults.isEmpty)
+        XCTAssertTrue(model.emptyResultsMessage.contains("включён в поиск"))
+        XCTAssertTrue(model.emptyResultsMessage.contains("В сохранённой выборке hh.ru"))
+        XCTAssertEqual(model.statisticsReportSnapshot().employerName, "Банк России")
+        await model.refreshVacancies()
+        XCTAssertEqual(model.selectedEmployerID, "47858", "Zero results must not silently reset the employer filter")
+        let requestCount = await client.requestedEmployerIDs.count
+        let restored = VacancySearchViewModel(apiClient: client, employerStore: employers, snapshotStore: snapshot)
+        await restored.loadPersistenceIfNeeded()
+        XCTAssertTrue(restored.employerFilterOptions.contains(.init(id: "47858", title: "Банк России")))
+        let requestsAfterRestore = await client.requestedEmployerIDs.count
+        XCTAssertEqual(requestsAfterRestore, requestCount, "Loading filter options must not request the network")
+        restored.toggleFavorite(id: "1654251-0")
+        restored.displayMode = .favorites
+        XCTAssertFalse(restored.employerFilterOptions.contains(where: { $0.id == "47858" }))
+        restored.displayMode = .all
+        XCTAssertTrue(restored.employerFilterOptions.contains(where: { $0.id == "47858" }))
+    }
+
     override func tearDown() {
         URLProtocolStub.handler = nil
         super.tearDown()
-    }
-
-    func testTechnologyClassificationRecognizesRequestedFamilies() {
-        let titles = [
-            "Backend-разработчик", "Разработчик 1С", "QA Engineer", "SRE инженер",
-            "Информационные и коммуникационные технологии", "Архитектор решений",
-            "Архитектура решений", "Технический писатель", "UX/UI-дизайнер",
-            "Менеджер продукта", "Финансовый аналитик", "HR-аналитика", "Риск-аналитика",
-            "BI-разработка", "Инженерия данных", "Data Governance", "ETL-разработчик",
-            "Машинное обучение", "LLM-приложения", "RAG-системы", "Edge AI",
-            "Промышленная автоматизация", "Геоинформационные системы", "Биоинформатика",
-            "Методология разработки", "Low-code разработчик", "C++ developer", "HR-tech",
-            "Пентестер", "Системный администратор", "Product Owner", "Интернет"
-        ]
-        for title in titles {
-            XCTAssertTrue(VacancyTechnologyClassifier.matches(title: title), title)
-        }
-    }
-
-    func testTechnologyClassificationAvoidsUnrelatedWordsAndOfficeRequirements() {
-        for title in ["Кассир", "Кредитный специалист", "Водитель", "Архитектор зданий",
-                      "Аудитор", "Менеджер по продажам", "Биолог", "Администратор офиса"] {
-            XCTAssertFalse(VacancyTechnologyClassifier.matches(
-                title: title, context: "Работа в цифровой команде. Пользователь ПК, Excel, интернет и CRM."
-            ), title)
-        }
-        XCTAssertTrue(VacancyTechnologyClassifier.matches(title: "Эксперт", roles: ["Программист, разработчик"]))
-        XCTAssertTrue(VacancyTechnologyClassifier.matches(title: "Инженер", context: "Разработка RAG-системы и векторный поиск"))
-        XCTAssertFalse(VacancyTechnologyClassifier.matches(title: "Repair specialist"))
-    }
-
-    func testInformationSecurityClassificationCoversRequestedDisciplines() {
-        let disciplines = """
-        информационная безопасность; кибербезопасность; защита информации; компьютерная безопасность
-        техническая защита информации; организационная защита информации; правовая защита информации; инженерно-техническая защита
-        защита информации в автоматизированных системах; защита информации в компьютерных системах и сетях; защита информации в телекоммуникационных системах и сетях
-        безопасность компьютерных систем и сетей; информационно-аналитические системы безопасности; безопасность информационных технологий в правоохранительной сфере
-        разработка средств защиты информации; производство средств защиты информации; внедрение средств защиты информации; администрирование средств защиты информации
-        эксплуатация систем защиты информации; проектирование систем защиты информации; архитектура информационной безопасности; управление информационной безопасностью
-        стратегия информационной безопасности; методология информационной безопасности; политики и регламенты информационной безопасности; управление рисками информационной безопасности
-        комплаенс информационной безопасности; аудит информационной безопасности; оценка соответствия требованиям по защите информации; оценка защищённости; анализ угроз; моделирование угроз
-        анализ уязвимостей; управление уязвимостями; тестирование на проникновение; анализ защищённости; этичный хакинг; red team; blue team; purple team; bug bounty; исследование уязвимостей
-        безопасность приложений (AppSec); безопасная разработка; DevSecOps; безопасный SDLC; анализ исходного кода; динамическое тестирование приложений; анализ состава программного обеспечения
-        безопасность кода; безопасность API; безопасность веб-приложений; защита веб-приложений (WAF); безопасность мобильных приложений; безопасность контейнеров и оркестрации
-        безопасность CI/CD; облачная безопасность; сетевая безопасность; безопасность периметра; межсетевое экранирование; сегментация сетей; обнаружение и предотвращение вторжений
-        анализ сетевого трафика; NDR; защита от DDoS; безопасность беспроводных сетей; безопасность электронной почты; антифишинг; защита конечных точек; антивирусная защита; EDR; XDR; песочницы
-        защита от вредоносного кода; анализ вредоносного программного обеспечения; реверс-инжиниринг вредоносного кода; мониторинг информационной безопасности
-        центр мониторинга и реагирования (SOC); управление событиями информационной безопасности (SIEM); оркестрация и автоматизация реагирования (SOAR)
-        управление инцидентами информационной безопасности; реагирование на инциденты; расследование инцидентов; цифровая криминалистика; компьютерно-техническая экспертиза
-        threat hunting; разведка киберугроз; ГосСОПКА; обнаружение и предупреждение компьютерных атак; управление идентификацией и доступом (IAM)
-        управление привилегированным доступом (PAM); аутентификация и авторизация; многофакторная аутентификация; управление секретами; Zero Trust
-        защита данных; безопасность данных; конфиденциальность данных; предотвращение утечек данных (DLP); контроль доступа к базам данных; DCAP; классификация данных; маскирование данных; безопасность баз данных
-        криптографическая защита информации; средства криптографической защиты; инфраструктура открытых ключей; удостоверяющие центры; электронная подпись; управление ключами; стеганография
-        защита персональных данных; безопасность ИСПДн; защита коммерческой тайны; защита государственной тайны; режим секретности; противодействие техническим разведкам
-        защита от утечки по техническим каналам; физическая защита информации; безопасность критической информационной инфраструктуры; безопасность объектов КИИ
-        безопасность государственных информационных систем; безопасность АСУ ТП; промышленная кибербезопасность; аттестация объектов информатизации; сертификация средств защиты информации
-        лицензирование деятельности по защите информации; соответствие требованиям ФСТЭК; соответствие требованиям ФСБ; соответствие требованиям Банка России
-        ГОСТ Р ИСО/МЭК 27001; ГОСТ Р 57580; PCI DSS; информационная безопасность кредитно-финансовой сферы; антифрод; безопасность платежей
-        безопасность искусственного интеллекта; безопасность моделей машинного обучения; защита от атак на ИИ; безопасность интернета вещей; безопасность виртуализации
-        безопасность беспилотных и автономных систем; безопасность цепочки поставок программного обеспечения; непрерывность деятельности и аварийное восстановление
-        киберустойчивость; резервное копирование и восстановление; управление конфигурациями безопасности; осведомлённость по информационной безопасности
-        консалтинг по информационной безопасности; управление проектами информационной безопасности; взаимодействие с регуляторами
-        """.components(separatedBy: CharacterSet(charactersIn: ";\n")).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        XCTAssertGreaterThan(disciplines.count, 130)
-        for discipline in disciplines {
-            XCTAssertTrue(VacancyInformationSecurityClassifier.matches(title: discipline), discipline)
-        }
-        for title in ["Специалист по ИБ", "Инженер СЗИ/СКЗИ", "SOC-аналитик L2", "Архитектор AppSec",
-                      "CISO", "Cybersecurity Engineer", "Information Security Officer", "Пентестер",
-                      "Специалист по оценке защищенности", "Red‑Team инженер", "Инженер по\nзащите\u{00a0}информации"] {
-            XCTAssertTrue(VacancyInformationSecurityClassifier.matches(title: title), title)
-        }
-    }
-
-    func testInformationSecurityClassificationUsesSpecificContextAndRoleEvidence() {
-        for context in ["Проектирование систем защиты информации", "Мониторинг событий SIEM и расследование атак",
-                        "Проводить аудит информационной безопасности", "Внедрение DLP", "Работа с PCI DSS",
-                        "Контроль соблюдения требований информационной безопасности", "Разработка политик ИБ"] {
-            XCTAssertTrue(VacancyInformationSecurityClassifier.matches(title: "Главный эксперт", context: context), context)
-        }
-        XCTAssertTrue(VacancyInformationSecurityClassifier.matches(title: "Эксперт", roles: ["Специалист по информационной безопасности"]))
-        XCTAssertTrue(VacancyInformationSecurityClassifier.matches(title: "Эксперт", roles: ["Инженер по резервному копированию"]))
-    }
-
-    func testInformationSecurityClassificationAvoidsGenericSecurityAndBoilerplate() {
-        for title in ["Охранник", "Специалист по пожарной безопасности", "Инженер по промышленной безопасности",
-                      "Специалист по экономической безопасности", "Java-разработчик", "Менеджер по продажам",
-                      "Кассир", "Финансовый аудитор", "Дизайнер", "Социальный работник", "Pampas specialist",
-                      "Сибирский региональный менеджер", "DevOps engineer"] {
-            for context in ["Соблюдение требований информационной безопасности и охраны труда.",
-                            "Соблюдать внутренние политики ИБ. Знание основ информационной безопасности.",
-                            "Следовать правилам защиты персональных данных.",
-                            "Резервное копирование и восстановление. Анализ исходного кода. Аутентификация и авторизация.",
-                            "Взаимодействие с регуляторами. Соответствие требованиям Банка России.",
-                            "Согласие на обработку персональных данных.", "Работа в SOCIETY, IPSUM, EDRIVE."] {
-                XCTAssertFalse(VacancyInformationSecurityClassifier.matches(title: title, context: context), "\(title): \(context)")
-            }
-        }
-    }
-
-    func testInformationSecurityFieldSurvivesDetailAndFavoriteLifecycle() throws {
-        let summary = HHVacancySummary(id: "security", name: "Инженер", employer: .init(name: "Банк России"),
-                                       salary: nil, area: nil, alternateURL: nil, url: nil, snippet: nil)
-        let partial = HHVacancyDetails(id: summary.id, name: summary.name, employer: summary.employer,
-                                       area: nil, salary: nil, alternateURL: nil, description: nil, archived: false)
-        let before = VacancySearchResult(id: summary.id, summary: summary, details: partial)
-        XCTAssertEqual(before.field, .general)
-        let details = HHVacancyDetails(id: summary.id, name: summary.name, employer: summary.employer,
-                                      area: nil, salary: nil, alternateURL: nil,
-                                      description: "<p>Разработка <b>средств защиты информации</b> и сервисов на Java.</p>", archived: false)
-        let loaded = VacancySearchResult(id: summary.id, summary: summary, details: details, isDetailLoaded: true)
-        XCTAssertTrue(loaded.isTechnologyRelated)
-        XCTAssertTrue(loaded.isInformationSecurityRelated)
-        XCTAssertEqual(loaded.field, .informationSecurity)
-        XCTAssertEqual(loaded.updatingDetailState(isLoading: true, errorMessage: nil).field, .informationSecurity)
-        let favorite = FavoriteVacancyRecord(result: loaded, favoritedAt: Date(), updatedAt: Date())
-        let restored = try JSONDecoder().decode(FavoriteVacancyRecord.self, from: JSONEncoder().encode(favorite))
-        XCTAssertEqual(restored.searchResult.field, .informationSecurity)
-        XCTAssertEqual(restored.searchResult.htmlDescription, loaded.htmlDescription)
-
-        let plainIT = HHVacancyDetails(id: "it", name: "Java-разработчик", employer: nil, area: nil, salary: nil,
-                                      alternateURL: nil, description: "Соблюдение требований информационной безопасности.", archived: false)
-        XCTAssertEqual(VacancySearchResult(id: "it", summary: summary, details: plainIT).field, .technology)
-        let snippet = HHVacancySummary(id: "snippet", name: "Эксперт", employer: nil, salary: nil, area: nil,
-                                      alternateURL: nil, url: nil, snippet: .init(requirement: "Опыт внедрения SIEM", responsibility: nil))
-        XCTAssertEqual(VacancySearchResult(id: "snippet", summary: snippet, details: partial).field, .informationSecurity)
-    }
-
-    func testVacancyFieldTextContrastsWithBothNativeBackgrounds() throws {
-        func luminance(_ channels: [Double]) -> Double {
-            zip(channels.map { $0 <= 0.04045 ? $0 / 12.92 : pow(($0 + 0.055) / 1.055, 2.4) },
-                [0.2126, 0.7152, 0.0722]).map(*).reduce(0, +)
-        }
-        for (appearance, scheme) in [(NSAppearance.Name.aqua, SwiftUI.ColorScheme.light), (.darkAqua, .dark)] {
-            try XCTUnwrap(NSAppearance(named: appearance)).performAsCurrentDrawingAppearance {
-                for background in [NSColor.textBackgroundColor, .windowBackgroundColor] {
-                    let bg = background.usingColorSpace(.sRGB)!
-                    let bgL = luminance([bg.redComponent, bg.greenComponent, bg.blueComponent])
-                    for field in [VacancyField.technology, .informationSecurity] {
-                        for tone in [VacancyFieldPalette.primary(for: field, scheme: scheme)!, VacancyFieldPalette.secondary(for: field, scheme: scheme)!] {
-                            let rgb = tone.rgb
-                            let fgL = luminance([Double((rgb >> 16) & 255), Double((rgb >> 8) & 255), Double(rgb & 255)].map { $0 / 255 })
-                            XCTAssertGreaterThanOrEqual((max(bgL, fgL) + 0.05) / (min(bgL, fgL) + 0.05), 4.5, "\(field), \(scheme), \(tone.css)")
-                        }
-                    }
-                }
-            }
-        }
     }
 
     func testEmbeddedApplicationTokenIsConfigured() {
@@ -1091,46 +977,6 @@ final class HHVacancyCBRTests: XCTestCase {
         XCTAssertEqual(details.id, vacancy.id)
         XCTAssertFalse(details.name.isEmpty)
         XCTAssertLessThanOrEqual(requestCount, maximumRequestCount)
-    }
-
-    func testLiveAPITechnologyBadgeRecognizesExplicitTechnicalTitles() async throws {
-        try XCTSkipUnless(
-            ProcessInfo.processInfo.environment["HHVACANCYCBR_RUN_LIVE_TECHNOLOGY_TEST"] == "1",
-            "Opt-in: set HHVACANCYCBR_RUN_LIVE_TECHNOLOGY_TEST=1. At most one search request."
-        )
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 15
-        configuration.timeoutIntervalForResource = 20
-        configuration.urlCache = nil
-        let session = URLSession(configuration: configuration)
-        defer { session.invalidateAndCancel() }
-        let client = HHAPIClient(session: session, requestGate: HHRequestGate(), maximumRateLimitRetries: 0, maximumTransientRetries: 0)
-
-        // One bounded production request; no paging, detail fetching or retry on errors.
-        let response = try await client.searchVacancies(.init(employerID: "47858", perPage: 20))
-        XCTAssertLessThanOrEqual(response.items.count, 20)
-        // Independent, intentionally narrow oracle, not the production classifier:
-        // these job titles unambiguously belong to the requested technology group.
-        let technicalTitle = try NSRegularExpression(
-            pattern: #"(?i)(?<![\p{L}\p{N}])(?:разработчик[а-я]*|программист[а-я]*|тестировщик[а-я]*|devops|sre|frontend|backend|fullstack)(?![\p{L}\p{N}])"#
-        )
-        let candidates = response.items.filter { vacancy in
-            technicalTitle.firstMatch(in: vacancy.name, range: NSRange(vacancy.name.startIndex..., in: vacancy.name)) != nil
-        }
-        try XCTSkipIf(candidates.isEmpty, "No explicit technical titles in this live sample; no additional requests made.")
-        for summary in candidates {
-            let result = VacancySearchResult(
-                id: summary.id,
-                summary: summary,
-                details: HHVacancyDetails(
-                    id: summary.id, name: summary.name, employer: summary.employer,
-                    area: summary.area, salary: summary.salary,
-                    alternateURL: summary.alternateURL, description: nil
-                )
-            )
-            XCTAssertTrue(result.isTechnologyRelated, "Explicit technical title must receive the technology badge (vacancy ID: \(summary.id)).")
-            XCTAssertTrue(result.updatingDetailState(isLoading: true, errorMessage: nil).isTechnologyRelated)
-        }
     }
 
     @MainActor
@@ -2940,7 +2786,7 @@ final class HHVacancyCBRTests: XCTestCase {
     }
 
     @MainActor
-    func testPDFHeadingAndBodyTypographyUsesReducedPointSizes() throws {
+    func testPDFHeadingAndBodyTypographyUsesSharedMinimalistStyle() throws {
         let document = VacancyPDFFormatter.attributedDocument(for: makePDFVacancy(id: "typography"))
         let text = document.string as NSString
 
@@ -2956,12 +2802,12 @@ final class HHVacancyCBRTests: XCTestCase {
             ).pointSize
         }
 
-        XCTAssertEqual(try fontSize(at: "Инженер надёжности typography"), 18, accuracy: 0.01)
-        XCTAssertEqual(try fontSize(at: "Основная информация"), 13, accuracy: 0.01)
+        XCTAssertEqual(try fontSize(at: "Инженер надёжности typography"), 26, accuracy: 0.01)
+        XCTAssertEqual(try fontSize(at: "Основная информация"), 14, accuracy: 0.01)
         XCTAssertEqual(try fontSize(at: "Работодатель: Банк России"), 9.5, accuracy: 0.01)
         XCTAssertEqual(
             try fontSize(at: "Работодатель: Банк России", offset: ("Работодатель: " as NSString).length),
-            7.5,
+            9.5,
             accuracy: 0.01
         )
     }
@@ -3060,7 +2906,7 @@ final class HHVacancyCBRTests: XCTestCase {
             XCTAssertTrue(text.contains("2026-09-02T12:34:56+0300"), "Lost summary publication date")
             XCTAssertTrue(text.contains("123 456"), "Lost summary salary")
             XCTAssertTrue(text.contains("https://example.invalid/fallback-fields"))
-            XCTAssertTrue(text.contains("Полное описание из detail endpoint HH недоступно."))
+            XCTAssertFalse(text.contains("Полное описание из detail endpoint HH недоступно."))
             let attachment = XCTAttachment(data: try Data(contentsOf: file), uniformTypeIdentifier: "com.adobe.pdf")
             attachment.name = file.lastPathComponent == "personal.pdf" ? "Fallback personal PDF" : "Fallback favorites PDF"
             attachment.lifetime = .keepAlways
@@ -3096,7 +2942,7 @@ final class HHVacancyCBRTests: XCTestCase {
             ("<p>ёж &amp; Ω 🙂</p>", "ёж & Ω 🙂"),
             ("<script>hidden()</script><style>body{}</style><p>Visible</p>", "Visible"),
             ("<div>First<br>Second</div>", "First\nSecond"),
-            ("<ul><li>One</li><li>Two</li></ul>", "• One\n\n• Two"),
+            ("<ul><li>One</li><li>Two</li></ul>", "– One\n\n– Two"),
             ("&lt;x&gt; &quot;quoted&quot; &#39;text&#39;", "<x> \"quoted\" 'text'")
         ]
         let results = await withTaskGroup(of: [String].self, returning: [[String]].self) { group in
@@ -3161,6 +3007,29 @@ final class HHVacancyCBRTests: XCTestCase {
         XCTAssertTrue(model.canExportStatisticsPDF)
     }
 
+    func testStatisticsRecordsKeepRequiredMetadataTogetherAndPersistAcceptance() throws {
+        for closed: Bool? in [true, false, nil] {
+            var summary = statisticsVacancy(id: "metadata", date: nil).summary
+            summary.closedForApplicants = closed
+            let vacancy = VacancySearchResult(summary: summary, location: .unknown)
+            let expected = closed.map { $0 ? "Закрыт" : "Открыт" } ?? "Не указан"
+            let record = FavoriteVacancyRecord(result: vacancy, favoritedAt: Date(), updatedAt: Date())
+            let restored = try JSONDecoder().decode(FavoriteVacancyRecord.self, from: JSONEncoder().encode(record))
+            XCTAssertEqual(restored.searchResult.applicationStatusText, expected)
+            let text = try statisticsFixture([vacancy]).attributedDocument().string
+            for field in ["Идентификатор вакансии: metadata", "Дата публикации: Не указана",
+                          "Статус: Не проверен", "Приём откликов: " + expected] {
+                XCTAssertTrue(text.contains(field))
+            }
+        }
+        let report = statisticsFixture((0..<30).map { statisticsVacancy(id: "row-\($0)", date: nil) })
+        let pages = FavoriteVacanciesPDFExporter.pages(for: try report.attributedDocument())
+        for entry in report.entries {
+            let page = try XCTUnwrap(pages.first { $0.content.string.contains("Идентификатор вакансии: " + entry.id + "\u{2028}") })
+            XCTAssertTrue(page.content.string.contains(entry.name + "\u{2028}Идентификатор вакансии: " + entry.id + "\u{2028}Дата публикации: Не указана\u{2028}Статус: Активна\u{2028}Приём откликов: Не указан"))
+        }
+    }
+
     func testStatisticsChronologyCountsMissingDatesAndPDFCompleteness() throws {
         let report = statisticsFixture([
             statisticsVacancy(id: "old", date: "2026-09-01T10:00:00+0300"),
@@ -3176,7 +3045,7 @@ final class HHVacancyCBRTests: XCTestCase {
         XCTAssertTrue(document.string.contains("С указанной зарплатой: 1"))
         XCTAssertTrue(document.string.contains("Без корректной даты размещения: 2"))
         let vacancyRowStringRange = try XCTUnwrap(
-            document.string.range(of: "1. Вакансия fractional: 03.09.2026 08:00")
+            document.string.range(of: "1. Вакансия fractional")
         )
         let vacancyRowRange = NSRange(vacancyRowStringRange, in: document.string)
         document.enumerateAttribute(.font, in: vacancyRowRange) { value, _, _ in
@@ -3184,14 +3053,14 @@ final class HHVacancyCBRTests: XCTestCase {
                 XCTFail("В строке вакансии должен быть задан шрифт")
                 return
             }
-            XCTAssertEqual(font.pointSize, 7.5)
+            XCTAssertEqual(font.pointSize, 11)
             XCTAssertFalse(font.fontDescriptor.symbolicTraits.contains(.bold))
         }
         let vacancyRowStyle = try XCTUnwrap(
             document.attribute(.paragraphStyle, at: vacancyRowRange.location, effectiveRange: nil) as? NSParagraphStyle
         )
         XCTAssertEqual(vacancyRowStyle.lineSpacing, 3)
-        XCTAssertEqual(vacancyRowStyle.paragraphSpacing, 5)
+        XCTAssertEqual(vacancyRowStyle.paragraphSpacing, 16)
         let pages = FavoriteVacanciesPDFExporter.pages(for: document)
         XCTAssertEqual(pages.map(\.content.string).joined(), document.string)
         let data = try FavoriteVacanciesPDFExporter.pdfData(for: pages)
@@ -3275,7 +3144,7 @@ final class HHVacancyCBRTests: XCTestCase {
         let data = try FavoriteVacanciesPDFExporter.pdfData(for: pages)
         try FavoriteVacanciesPDFExporter.validatePDF(data: data, expectedPages: pages.count)
         let text = try extractedStatisticsText(XCTUnwrap(PDFDocument(data: data)))
-        for entry in report.entries { XCTAssertTrue(text.contains(entry.name + ":")) }
+        for entry in report.entries { XCTAssertTrue(text.contains("Идентификатор вакансии: " + entry.id)) }
     }
 
     @MainActor
@@ -3370,8 +3239,8 @@ final class HHVacancyCBRTests: XCTestCase {
         XCTAssertTrue(text.contains("Список: Избранное"))
         XCTAssertTrue(text.contains("Работодатель: Банк России"))
         XCTAssertTrue(text.contains("Регион: Москва"))
-        XCTAssertTrue(text.contains("Вакансия filter-moscow:"))
-        XCTAssertFalse(text.contains("Вакансия filter-remote:"))
+        XCTAssertTrue(text.contains("Вакансия filter-moscow"))
+        XCTAssertFalse(text.contains("Вакансия filter-remote"))
         XCTAssertTrue(panel.names[0].contains("избранное_банк_россии_москва"))
         XCTAssertEqual(model.displayedResults.map(\.id), ["filter-remote"])
         XCTAssertTrue(model.canExportFavoritesPDF)
@@ -3433,10 +3302,10 @@ final class HHVacancyCBRTests: XCTestCase {
         XCTAssertTrue(text.contains("Всего вакансий: 2"))
         XCTAssertTrue(text.contains("В архиве: 1"))
         XCTAssertTrue(text.contains("С указанной зарплатой: 1"))
-        XCTAssertTrue(text.contains("Вакансия offline-new:"))
-        XCTAssertTrue(text.contains("Вакансия offline-old:"))
-        XCTAssertLessThan((text as NSString).range(of: "Вакансия offline-new:").location,
-                          (text as NSString).range(of: "Вакансия offline-old:").location)
+        XCTAssertTrue(text.contains("Вакансия offline-new"))
+        XCTAssertTrue(text.contains("Вакансия offline-old"))
+        XCTAssertLessThan((text as NSString).range(of: "Вакансия offline-new").location,
+                          (text as NSString).range(of: "Вакансия offline-old").location)
         let searches = await client.searchRequestCount
         let details = await client.detailRequestCount
         let attemptedDetails = await client.requestedDetailIDs
@@ -3464,7 +3333,8 @@ final class HHVacancyCBRTests: XCTestCase {
         XCTAssertNotNil(model.errorMessage)
         await model.exportStatisticsPDF()
         let text = try extractedStatisticsText(XCTUnwrap(PDFDocument(url: XCTUnwrap(panel.destination))))
-        XCTAssertTrue(text.contains("Последнее обновление не завершено"))
+        XCTAssertFalse(text.contains("Последнее обновление не завершено"))
+        XCTAssertTrue(model.statisticsReportSnapshot().sourceNote.contains("Последнее обновление не завершено"))
         XCTAssertTrue(text.contains("Всего вакансий: 3"))
         XCTAssertTrue(model.canExportStatisticsPDF)
     }
@@ -3508,7 +3378,7 @@ final class HHVacancyCBRTests: XCTestCase {
         catch is CancellationError { }
         XCTAssertEqual(try Data(contentsOf: url), original)
         try await worker.exportStatistics(report: report, destination: url)
-        XCTAssertTrue(try extractedStatisticsText(XCTUnwrap(PDFDocument(url: url))).contains("Вакансия retry:"))
+        XCTAssertTrue(try extractedStatisticsText(XCTUnwrap(PDFDocument(url: url))).contains("Вакансия retry"))
     }
 
     func testOptInPDFRenderingMetrics() throws {
@@ -3604,7 +3474,7 @@ final class HHVacancyCBRTests: XCTestCase {
         XCTAssertTrue(text.contains("Работодателей: \(Set(expectedRows.map(\.employer)).count)"), context, file: file, line: line)
         XCTAssertTrue(text.contains("Регионов / территориальных групп: \(Set(expectedRows.map(\.region)).count)"), context, file: file, line: line)
         for row in statisticsFilterRows {
-            XCTAssertEqual(text.contains("Вакансия \(row.id):"), expected.contains(row.id), context, file: file, line: line)
+            XCTAssertEqual(text.contains("Вакансия \(row.id)"), expected.contains(row.id), context, file: file, line: line)
         }
         // Fixture 47858 was published a day later than the other employers.
         let expectedOrder = expectedRows.sorted {
@@ -3613,7 +3483,7 @@ final class HHVacancyCBRTests: XCTestCase {
         }
         var previousPosition = -1
         for row in expectedOrder {
-            let position = (text as NSString).range(of: "Вакансия \(row.id):").location
+            let position = (text as NSString).range(of: "Вакансия \(row.id)").location
             XCTAssertNotEqual(position, NSNotFound, context, file: file, line: line)
             XCTAssertGreaterThan(position, previousPosition, context, file: file, line: line)
             previousPosition = position
@@ -4590,4 +4460,87 @@ private actor FieldSearchClient: HHVacancyAPIClient {
     }
     func areaTree() async throws -> HHAreaNode { .init(id: "113", name: "Россия") }
     func vacancyDictionaries() async throws -> HHVacancyDictionaries { .init(experience: [], workFormat: [], schedule: []) }
+}
+
+final class DocumentArchiveTests: XCTestCase {
+    func testStreebogRFC6986AndLegacySHA256() throws {
+        let first = Data("012345678901234567890123456789012345678901234567890123456789012".utf8)
+        let hex = "d1e520e2e5f2f0e82c20d1f2f0e8e1eee6e820e2edf3f6e82c20e2e5fef2fa20f120eceef0ff20f1f2f0e5ebe0ece820ede020f5f0e0e1f0fbff20efebfaeafb20c8e3eef0e5e2fb"
+        let second = Data(stride(from: 0, to: hex.count, by: 2).map { offset in UInt8(String(Array(hex)[offset..<offset+2]), radix: 16)! })
+        // RFC vectors are printed most significant byte first; file digest convention reverses that representation.
+        XCTAssertEqual(try MaterialHash.digest(first), "1b54d01a4af5b9d5cc3d86d68d285462b19abc2475222f35c085122be4ba1ffa00ad30f8767b3a82384c6574f024c311e2a481332b08ef7f41797891c1646f48")
+        XCTAssertEqual(try MaterialHash.digest(second), "1e88e62226bfca6f9994f1f2d51569e0daf8475a3b0fe61a5300eee46d961376035fe83549ada2b8620fcd7c496ce5b33f0cb9dddc2b6460143b03dabac9fb28")
+        XCTAssertEqual(try MaterialHash.digest(Data("abc".utf8), algorithm: "SHA-256"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+        XCTAssertThrowsError(try MaterialHash.digest(first, algorithm: "unknown"))
+    }
+    func testObservationAppendOnlyPeriodSelectionAndOriginalBytes() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = DocumentArchive(root: root)
+        let bytes = Data(#"{ "id":"42", "name":"Экономист", "archived":false, "published_at":"2026-10-17T10:15:16+0300" }"#.utf8)
+        let url = URL(string: "https://api.hh.ru/vacancies/42?access_token=SECRET&area=1")!
+        let t = Date(timeIntervalSince1970: 1_790_000_000)
+        let first = try XCTUnwrap(store.capture(data: bytes, url: url, status: 200, sent: t, received: t.addingTimeInterval(1)))
+        let second = try XCTUnwrap(store.capture(data: bytes, url: url, status: 200, sent: t.addingTimeInterval(9), received: t.addingTimeInterval(10)))
+        XCTAssertNotEqual(first.id, second.id)
+        XCTAssertEqual(try store.observations().count, 2)
+        XCTAssertEqual(try store.history(from: t, to: t.addingTimeInterval(5)).count, 1)
+        XCTAssertEqual(try Data(contentsOf: root.appendingPathComponent("observations/\(first.id)/response.json")), bytes)
+        XCTAssertFalse(String(data: try ArchiveJSON.encode(first), encoding: .utf8)!.contains("SECRET"))
+        XCTAssertEqual(first.parameters, ["area": "1"])
+        XCTAssertNil(try store.capture(data: bytes, url: url, status: 404, sent: t, received: t))
+        XCTAssertEqual(try store.observations().count, 2)
+        XCTAssertThrowsError(try store.capture(data: Data(#"{"id":"42","access_token":"SECRET"}"#.utf8), url: url, status: 200, sent: t, received: t))
+    }
+    func testManifestIntegrityRestoreAndTraversal() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = DocumentArchive(root: root)
+        let pdf = Data("%PDF-original-bytes".utf8)
+        let context = DocumentContext(kind: "fixture", vacancyIDs: ["42"])
+        let folder = try store.archive(pdf: pdf, context: context)
+        try store.verify(folder)
+        let restored = root.appendingPathComponent("restored.pdf")
+        try store.restore(id: context.id, destination: restored)
+        XCTAssertEqual(try Data(contentsOf: restored), pdf)
+        XCTAssertThrowsError(try store.archive(pdf: Data(), context: context))
+        XCTAssertNotEqual(context.id, DocumentContext(kind: "fixture", vacancyIDs: ["42"]).id)
+        try Data("corrupt".utf8).write(to: folder.appendingPathComponent("document.pdf"))
+        XCTAssertThrowsError(try store.verify(folder))
+        try pdf.write(to: folder.appendingPathComponent("document.pdf"))
+        let manifestURL = folder.appendingPathComponent("manifest.json")
+        let original = try Data(contentsOf: manifestURL)
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: original) as? [String: Any])
+        var files = try XCTUnwrap(json["files"] as? [[String: Any]])
+        files[0]["path"] = "../outside.pdf"; json["files"] = files
+        try JSONSerialization.data(withJSONObject: json).write(to: manifestURL)
+        XCTAssertThrowsError(try store.verify(folder))
+        XCTAssertThrowsError(try store.restore(id: "../escape", destination: restored))
+    }
+}
+
+extension DocumentArchiveTests {
+    func testPDFContainsExactOriginalBinaryAttachmentsAndReadablePages() throws {
+        let bytes = Data([0, 10, 13, 127, 128, 255]) + Data("endstream\nendobj\n(•) Кириллица".utf8)
+        let page = NSAttributedString(string: "Проверка вложений PDF", attributes: [.font: VacancyPDFStyle.bodyFont])
+        let original = try FavoriteVacanciesPDFExporter.pdfData(for: FavoriteVacanciesPDFExporter.pages(for: page))
+        let embedded = try PDFOriginalMaterials.embed([.init(path: "original.bin", data: bytes, type: "fixture", observationIDs: [])], in: original)
+        let provider = try XCTUnwrap(CGDataProvider(data: embedded as CFData))
+        let pdf = try XCTUnwrap(CGPDFDocument(provider))
+        let catalog = try XCTUnwrap(pdf.catalog)
+        var names: CGPDFDictionaryRef?, files: CGPDFDictionaryRef?, array: CGPDFArrayRef?
+        XCTAssertTrue(CGPDFDictionaryGetDictionary(catalog, "Names", &names))
+        XCTAssertTrue(CGPDFDictionaryGetDictionary(try XCTUnwrap(names), "EmbeddedFiles", &files))
+        XCTAssertTrue(CGPDFDictionaryGetArray(try XCTUnwrap(files), "Names", &array))
+        var spec: CGPDFDictionaryRef?, ef: CGPDFDictionaryRef?, stream: CGPDFStreamRef?
+        XCTAssertTrue(CGPDFArrayGetDictionary(try XCTUnwrap(array), 1, &spec))
+        XCTAssertTrue(CGPDFDictionaryGetDictionary(try XCTUnwrap(spec), "EF", &ef))
+        XCTAssertTrue(CGPDFDictionaryGetStream(try XCTUnwrap(ef), "F", &stream))
+        var format = CGPDFDataFormat.raw
+        let extracted = try XCTUnwrap(CGPDFStreamCopyData(try XCTUnwrap(stream), &format)) as Data
+        XCTAssertEqual(extracted, bytes)
+        XCTAssertEqual(pdf.numberOfPages, 1)
+        XCTAssertTrue(try XCTUnwrap(PDFDocument(data: embedded)?.string).contains("Проверка вложений PDF"))
+        XCTAssertThrowsError(try PDFOriginalMaterials.embed([], in: Data("invalid".utf8)))
+    }
 }

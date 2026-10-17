@@ -27,6 +27,10 @@
 		A10000022FF9BA0000CF4707 /* VacancySearchViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012FF9BA0000CF4707 /* VacancySearchViews.swift */; };
 		A10000022FF9BA0000CF4709 /* FavoriteVacancyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012FF9BA0000CF4709 /* FavoriteVacancyStore.swift */; };
 		A10000022FF9BA0000CF4710 /* FavoriteVacanciesPDFExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012FF9BA0000CF4710 /* FavoriteVacanciesPDFExporter.swift */; };
+DE1000000000000000000000 = {isa = PBXBuildFile; fileRef = DE0000000000000000000000; };
+DE1000000000000000000001 = {isa = PBXBuildFile; fileRef = DE0000000000000000000001; };
+DE1000000000000000000002 = {isa = PBXBuildFile; fileRef = DE0000000000000000000002; };
+DE1000000000000000000003 = {isa = PBXBuildFile; fileRef = DE0000000000000000000003; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -71,6 +75,10 @@
 		A10000012FF9BA0000CF4707 /* VacancySearchViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VacancySearchViews.swift; sourceTree = "<group>"; };
 		A10000012FF9BA0000CF4709 /* FavoriteVacancyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FavoriteVacancyStore.swift; sourceTree = "<group>"; };
 		A10000012FF9BA0000CF4710 /* FavoriteVacanciesPDFExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FavoriteVacanciesPDFExporter.swift; sourceTree = "<group>"; };
+DE0000000000000000000000 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DocumentArchive.swift"; sourceTree = "<group>"; };
+DE0000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = "Vendor/Streebog/gost3411-2012-core.c"; sourceTree = "<group>"; };
+DE0000000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = "Vendor/Streebog/Bridge.c"; sourceTree = "<group>"; };
+DE0000000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MonitoringViews.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -121,6 +129,10 @@
 		14C76CC52FF9B91E00CF4748 /* HHVacancyCBR */ = {
 			isa = PBXGroup;
 			children = (
+				DE0000000000000000000000,
+				DE0000000000000000000001,
+				DE0000000000000000000002,
+				DE0000000000000000000003,
 				14C76CC62FF9B91E00CF4748 /* HHVacancyCBRApp.swift */,
 				14C76CC82FF9B91E00CF4748 /* ContentView.swift */,
 				A10000012FF9BA0000CF4702 /* HHAPIClient.swift */,
@@ -303,6 +315,10 @@
 				A10000022FF9BA0000CF4702 /* HHAPIClient.swift in Sources */,
 				A10000022FF9BA0000CF4708 /* HHAuthConfig.swift in Sources */,
 				A10000022FF9BA0000CF4701 /* HHModels.swift in Sources */,
+				DE1000000000000000000000,
+
+				DE1000000000000000000002,
+				DE1000000000000000000003,
 				14C76CC72FF9B91E00CF4748 /* HHVacancyCBRApp.swift in Sources */,
 				B80000000000000000000011 /* EmployerConfiguration.swift in Sources */,
 				B80000000000000000000012 /* AreaDirectoryStore.swift in Sources */,
@@ -475,9 +491,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = HHVacancyCBR/HHVacancyCBR.entitlements;
+				SWIFT_OBJC_BRIDGING_HEADER = "HHVacancyCBR/Vendor/Streebog/Bridge.h";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_ASSET_PATHS = "\"HHVacancyCBR/Preview Content\"";
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = NO;
@@ -503,10 +520,11 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = HHVacancyCBR/HHVacancyCBR.entitlements;
+				SWIFT_OBJC_BRIDGING_HEADER = "HHVacancyCBR/Vendor/Streebog/Bridge.h";
 				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_ASSET_PATHS = "\"HHVacancyCBR/Preview Content\"";
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;

@@ -170,7 +170,13 @@ struct HHAPIClient: HHVacancyAPIClient, Sendable {
         if !queryItems.isEmpty { components.queryItems = queryItems }
         guard let url = components.url else { throw HHAPIError.invalidURL }
         let responseData = try await data(for: makeRequest(url: url))
-        return try JSONDecoder().decode(type, from: responseData)
+        let decoded = try JSONDecoder().decode(type, from: responseData.0)
+        if let response = decoded as? HHVacancySearchResponse {
+            let items = response.items.map { item -> HHVacancySummary in var copy = item; copy.observationID = responseData.1; return copy }
+            return HHVacancySearchResponse(items: items, found: response.found, pages: response.pages, page: response.page, perPage: response.perPage, rejectedItemCount: response.rejectedItemCount) as! T
+        }
+        if var details = decoded as? HHVacancyDetails { details.observationID = responseData.1; return details as! T }
+        return decoded
     }
 
     private func makeRequest(url: URL) -> URLRequest {
@@ -220,7 +226,7 @@ struct HHAPIClient: HHVacancyAPIClient, Sendable {
     ]
     static let transientStatusCodes: Set<Int> = [500, 502, 503, 504]
 
-    private func data(for request: URLRequest) async throws -> Data {
+    private func data(for request: URLRequest) async throws -> (Data, String?) {
         try await requestGate.perform {
             var retryCount = 0
             var transientRetryCount = 0
@@ -231,6 +237,7 @@ struct HHAPIClient: HHVacancyAPIClient, Sendable {
                 attempts += 1
                 let data: Data
                 let response: URLResponse
+                let sentAt = Date()
                 do { (data, response) = try await session.data(for: request) }
                 catch let error as URLError where error.code == .cancelled { throw CancellationError() }
                 catch let error as URLError where Self.transientURLErrorCodes.contains(error.code)
@@ -241,6 +248,7 @@ struct HHAPIClient: HHVacancyAPIClient, Sendable {
                     continue
                 }
                 guard let http = response as? HTTPURLResponse else { throw HHAPIError.invalidResponse }
+                if !(200...299).contains(http.statusCode) { DocumentArchive.shared.diagnostic("HeadHunter API HTTP \(http.statusCode)") }
                 if http.statusCode == 429 || (Self.transientStatusCodes.contains(http.statusCode)
                     && http.value(forHTTPHeaderField: "Retry-After") != nil) {
                     await requestGate.imposeCooldown(seconds: Self.serverDelay(
@@ -248,7 +256,14 @@ struct HHAPIClient: HHVacancyAPIClient, Sendable {
                     ))
                 }
                 try Task.checkCancellation()
-                if (200...299).contains(http.statusCode) { return data }
+                if (200...299).contains(http.statusCode) {
+                    if let token = accessTokenProvider.accessToken, !token.isEmpty, data.range(of: Data(token.utf8)) != nil {
+                        DocumentArchive.shared.diagnostic("Ответ API содержит значение токена; сохранение отклонено")
+                        throw ArchiveError.invalid("Секрет в ответе API")
+                    }
+                    let observation = try DocumentArchive.shared.capture(data: data, url: request.url!, status: http.statusCode, sent: sentAt, received: Date())
+                    return (data, observation?.id)
+                }
                 let body = try? JSONDecoder().decode(HHErrorResponse.self, from: data)
                 if body?.isCaptchaRequired == true { throw HHAPIError.captchaRequired(requestID: body?.requestID) }
                 switch http.statusCode {

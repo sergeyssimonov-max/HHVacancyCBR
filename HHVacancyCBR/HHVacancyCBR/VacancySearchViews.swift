@@ -5,6 +5,7 @@ enum VacancySearchViews {
     struct MainWindow: View {
         @ObservedObject var viewModel: VacancySearchViewModel
         let refresh: () -> Void
+        @State private var showingArchive = false
 
         private enum ToolbarMetrics {
             static let controlHeight: CGFloat = 32
@@ -28,10 +29,11 @@ enum VacancySearchViews {
                 content
             }
             .background(DeskPalette.content)
+            .sheet(isPresented: $showingArchive) { MonitoringArchiveView() }
         }
 
         private var toolbar: some View {
-            HStack(spacing: 8) {
+            HStack(spacing: 14) {
                 Picker("", selection: $viewModel.displayMode) {
                     Text("Вакансии").tag(VacancyListMode.all)
                     Text(viewModel.favorites.isEmpty ? "Избранное" : "Избранное · \(viewModel.favorites.count)").tag(VacancyListMode.favorites)
@@ -100,7 +102,7 @@ enum VacancySearchViews {
             } else if let error = viewModel.errorMessage, viewModel.displayedResults.isEmpty {
                 empty(title: "Не удалось загрузить вакансии", message: error, action: "Повторить")
             } else if viewModel.hasSearched && viewModel.displayedResults.isEmpty {
-                empty(title: "Вакансий не найдено", message: "Для выбранных работодателей и фильтров вакансий сейчас нет.", action: "Обновить")
+                empty(title: "Вакансий не найдено", message: viewModel.emptyResultsMessage, action: "Обновить")
             } else if !viewModel.hasSearched && viewModel.displayedResults.isEmpty {
                 empty(title: "ЦБВакансии", message: "Загрузите открытые вакансии настроенных работодателей периметра Банка России по всей России.", action: "Обновить")
             } else {
@@ -141,6 +143,7 @@ enum VacancySearchViews {
                         : !viewModel.canExportFavoritesPDF)
                         .accessibilityIdentifier("exportFavoritesPDFButton")
                 }
+                Button("История и архив") { showingArchive = true }.buttonStyle(.plain)
                 PDFExportCommand(title: viewModel.isExportingStatisticsPDF ? "Сохранение…" : "Статистика в PDF") {
                     Task { await viewModel.exportStatisticsPDF() }
                 }
@@ -204,7 +207,6 @@ enum VacancySearchViews {
 private struct PDFExportCommand: View {
     let title: String
     let action: () -> Void
-    var textColor: Color = .primary
 
     var body: some View {
         Button(action: action) {
@@ -215,7 +217,7 @@ private struct PDFExportCommand: View {
         }
         .buttonStyle(.borderless)
         .controlSize(.regular)
-        .foregroundColor(textColor)
+        .foregroundColor(.primary)
     }
 }
 
@@ -229,17 +231,8 @@ private struct VacancyCard: View {
     let openURL: () -> Void
     let copyURL: () -> Bool
     let exportPDF: () async -> Bool
-    @Environment(\.colorScheme) private var colorScheme
     @State private var copied = false
     @State private var exported = false
-
-    private var primaryText: Color {
-        VacancyFieldPalette.primary(for: result.field, scheme: colorScheme)?.color ?? .primary
-    }
-
-    private var secondaryText: Color {
-        VacancyFieldPalette.secondary(for: result.field, scheme: colorScheme)?.color ?? .secondary
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -256,25 +249,13 @@ private struct VacancyCard: View {
                             .help(result.fieldInstitution.reason ?? "")
                             .accessibilityIdentifier("fieldInstitutionBadge.\(result.id)")
                     }
-                    if result.field != .general {
-                        Text(result.field == .informationSecurity ? "ИБ" : "IT · Данные · ИИ")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(primaryText)
-                            .accessibilityLabel(result.field == .informationSecurity
-                                ? "Направление: информационная безопасность"
-                                : "Направление: IT, данные, искусственный интеллект и смежные технологии")
-                            .accessibilityIdentifier("\(result.field == .informationSecurity ? "informationSecurityLabel" : "technologyBadge").\(result.id)")
-                            .help(result.field == .informationSecurity
-                                ? "Информационная безопасность и смежные направления. Определено автоматически по содержанию вакансии."
-                                : "IT, данные, ИИ и смежные направления. Определено автоматически по содержанию вакансии.")
-                    }
-                    Text(result.employerName).font(.system(size: 13)).foregroundColor(secondaryText)
-                    if let department = result.departmentName { Text(department).font(.caption).foregroundColor(secondaryText) }
+                    Text(result.employerName).font(.system(size: 13)).foregroundColor(.secondary)
+                    if let department = result.departmentName { Text(department).font(.caption).foregroundColor(.secondary) }
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 5) {
                     Text(result.salaryText ?? "Зарплата не указана").font(.system(size: 13))
-                    Text(result.areaName).font(.caption).foregroundColor(secondaryText)
+                    Text(result.areaName).font(.caption).foregroundColor(.secondary)
                 }
             }
             HStack(spacing: 10) {
@@ -287,14 +268,12 @@ private struct VacancyCard: View {
                 Spacer()
                 PDFExportCommand(title: exported ? "✓ Сохранено" : "Экспорт в PDF", action: {
                     Task { if await exportPDF() { exported = true } }
-                }, textColor: primaryText).disabled(exported)
+                }).disabled(exported)
                     .accessibilityIdentifier("exportVacancyPDF.\(result.id)")
             }.buttonStyle(.borderless)
-                .foregroundColor(result.field != .general ? primaryText : nil)
-                .tint(result.field != .general ? primaryText : nil)
             if isExpanded { details }
         }
-        .foregroundColor(primaryText)
+        .foregroundColor(.primary)
         .padding(.horizontal, 28)
         .padding(.vertical, 18)
     }
@@ -306,9 +285,9 @@ private struct VacancyCard: View {
             } else if let error = result.detailErrorMessage {
                 Label(error, systemImage: "exclamationmark.triangle")
             } else if result.hasFullDescription {
-                VacancyHTMLDescriptionView(html: result.htmlDescription, field: result.field).frame(minHeight: 320)
+                VacancyHTMLDescriptionView(html: result.htmlDescription).frame(minHeight: 320)
             } else {
-                Text("Полное описание вакансии отсутствует.").foregroundColor(secondaryText)
+                Text("Полное описание вакансии отсутствует.").foregroundColor(.secondary)
             }
         }
         .font(.caption)
@@ -317,24 +296,12 @@ private struct VacancyCard: View {
 }
 
 struct VacancyHTMLDocument {
-    static func make(from bodyHTML: String, field: VacancyField = .general) -> String {
+    static func make(from bodyHTML: String) -> String {
         let body = VacancyHTMLAttributedText.sanitize(bodyHTML)
-        let fieldStyle: String
-        if let light = VacancyFieldPalette.primary(for: field, scheme: .light),
-           let dark = VacancyFieldPalette.primary(for: field, scheme: .dark) {
-            fieldStyle = """
-            :root{--vacancy-text:\(light.css)}
-            @media(prefers-color-scheme:dark){:root{--vacancy-text:\(dark.css)}}
-            body,a{color:var(--vacancy-text)}
-            """
-        } else {
-            fieldStyle = ""
-        }
         return """
         <!doctype html><html><head><meta charset="utf-8"><style>
         :root{color-scheme:light dark} body{margin:14px;font:-apple-system-body;color:-apple-system-label;background:transparent;overflow-wrap:anywhere}
         a{color:-apple-system-link} img,table{max-width:100%;height:auto}
-        \(fieldStyle)
         </style></head><body>\(body)</body></html>
         """
     }
@@ -342,7 +309,6 @@ struct VacancyHTMLDocument {
 
 struct VacancyHTMLDescriptionView: NSViewRepresentable {
     let html: String
-    var field: VacancyField = .general
     @Environment(\.colorScheme) private var colorScheme
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -353,17 +319,15 @@ struct VacancyHTMLDescriptionView: NSViewRepresentable {
     func updateNSView(_ view: WKWebView, context: Context) {
         // Match SwiftUI even when appearance is overridden locally; CSS updates without reloading.
         view.appearance = NSAppearance(named: colorScheme == .dark ? .darkAqua : .aqua)
-        guard context.coordinator.loaded != html || context.coordinator.field != field else { return }
+        guard context.coordinator.loaded != html else { return }
         context.coordinator.loaded = html
-        context.coordinator.field = field
-        view.loadHTMLString(VacancyHTMLDocument.make(from: html, field: field), baseURL: nil)
+        view.loadHTMLString(VacancyHTMLDocument.make(from: html), baseURL: nil)
     }
     // Keep the async delegate signature on both SDK generations. Xcode 15 imports
     // this requirement as nonisolated; Xcode 16 adds main-actor isolation in WebKit.
     @MainActor
     final class Coordinator: NSObject, WKNavigationDelegate {
         var loaded: String?
-        var field: VacancyField?
         #if compiler(>=6.0)
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {
             action.request.url?.scheme == "about" ? .allow : .cancel
@@ -373,35 +337,6 @@ struct VacancyHTMLDescriptionView: NSViewRepresentable {
             action.request.url?.scheme == "about" ? .allow : .cancel
         }
         #endif
-    }
-}
-
-// Opaque, muted tones keep small text readable on both native card backgrounds.
-// Share exact sRGB values between SwiftUI and the HTML description.
-enum VacancyFieldPalette {
-    struct Tone {
-        let rgb: UInt32
-        var color: Color {
-            Color(.sRGB, red: Double((rgb >> 16) & 0xff) / 255,
-                  green: Double((rgb >> 8) & 0xff) / 255, blue: Double(rgb & 0xff) / 255)
-        }
-        var css: String { String(format: "#%06X", rgb) }
-    }
-
-    static func primary(for field: VacancyField, scheme: ColorScheme) -> Tone? {
-        switch field {
-        case .general: return nil
-        case .technology: return Tone(rgb: scheme == .dark ? 0x8BC5CA : 0x176C74)
-        case .informationSecurity: return Tone(rgb: scheme == .dark ? 0xDEB394 : 0x925235)
-        }
-    }
-
-    static func secondary(for field: VacancyField, scheme: ColorScheme) -> Tone? {
-        switch field {
-        case .general: return nil
-        case .technology: return Tone(rgb: scheme == .dark ? 0x91B6BB : 0x326F76)
-        case .informationSecurity: return Tone(rgb: scheme == .dark ? 0xC7AD9B : 0x86624D)
-        }
     }
 }
 

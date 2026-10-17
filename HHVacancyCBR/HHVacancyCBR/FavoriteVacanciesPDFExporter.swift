@@ -1,13 +1,14 @@
 import AppKit
 import CoreGraphics
+import ImageIO
 import CryptoKit
 import Darwin
 import Foundation
 
 enum VacancyPDFDefaults {
     static let paperSize = NSSize(width: 595.28, height: 841.89)
-    static let horizontalMargin: CGFloat = 40
-    static let verticalMargin: CGFloat = 32
+    static let horizontalMargin: CGFloat = 56
+    static let verticalMargin: CGFloat = 48
     // NSLayoutManager and NSAttributedString.draw can differ by a fraction of a
     // line in their final font-leading calculation. Reserve one body line so a
     // glyph range accepted by pagination cannot be clipped during PDF drawing.
@@ -37,6 +38,34 @@ enum VacancyPDFDefaults {
             totalParts: totalParts,
             exportStartedAt: exportStartedAt
         )
+    }
+}
+
+/// Shared monochrome typography for personal, favorites and statistical PDFs.
+/// Fonts/colors are computed to avoid sharing non-Sendable AppKit objects.
+enum VacancyPDFStyle {
+    static func font(ofSize size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
+        // Arial has a correct Cyrillic ToUnicode map in CoreGraphics PDFs.
+        NSFont(name: "ArialMT", size: size) ?? NSFont.systemFont(ofSize: size, weight: weight)
+    }
+    static let bodySize: CGFloat = 9.5
+    static var bodyFont: NSFont { font(ofSize: bodySize) }
+    static var labelFont: NSFont { font(ofSize: bodySize, weight: .medium) }
+    static var headingFont: NSFont { font(ofSize: 14, weight: .regular) }
+    static var titleFont: NSFont { font(ofSize: 26, weight: .light) }
+    static var ink: NSColor { .black }
+    static var muted: NSColor { .black }
+    static let documentID = NSAttributedString.Key("HHDocumentID")
+    static let documentKind = NSAttributedString.Key("HHDocumentKind")
+    static let keepWithNext = NSAttributedString.Key("VacancyPDFKeepWithNext")
+
+    static func publicationDate(_ value: String?, timeZone: TimeZone = .current) -> String {
+        guard let date = HHPublicationDateParser().date(from: value) else { return "Не указана" }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ru_RU")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "dd.MM.yyyy HH:mm:ss XXX"
+        return formatter.string(from: date)
     }
 }
 
@@ -218,32 +247,34 @@ enum VacancyPDFFormatter {
     /// imported in advance falls back to plain text.
     static func attributedDocument(
         for vacancy: VacancySearchResult,
-        importedDescription: NSAttributedString?
+        importedDescription: NSAttributedString?,
+        context suppliedContext: DocumentContext? = nil
     ) -> NSAttributedString {
         let builder = VacancyPDFDocumentBuilder()
         let details = vacancy.details
 
-        builder.banner("ВАКАНСИЯ HEADHUNTER")
+        let context = suppliedContext ?? DocumentContext.vacancy(vacancy)
+        builder.documentHeader(context)
         builder.title(vacancy.name)
-        builder.provenance("Данные вакансии получены с HH.ru")
-        if let notice = vacancy.exportDataNotice?.nilIfBlank {
-            builder.notice(notice)
-        }
-
         builder.section("Основная информация")
         builder.field("Работодатель", vacancy.employerName)
-        if vacancy.isFieldInstitution { builder.field("Категория", "Полевое учреждение") }
+        builder.field("ID работодателя на hh.ru", vacancy.employerID)
+        if let id = vacancy.employerID { builder.linkField("URL работодателя", "https://hh.ru/employer/" + id) }
+        if vacancy.isFieldInstitution {
+            builder.field("Внутренняя категория HHVacancyCBR", "Полевые учреждения")
+            builder.field("Основание внутренней классификации", vacancy.fieldInstitution.reason)
+        }
         if let department = vacancy.departmentName {
             builder.field("Подразделение", department)
         }
-        builder.field("Регион", vacancy.areaName)
+        builder.field("Регион", vacancy.location.subjectName)
+        builder.field("Населённый пункт по hh.ru", details.area?.name ?? vacancy.summary.area?.name)
         appendAddress(details.address, to: builder)
-        builder.field("Статус", archiveStatus(for: vacancy))
-        if let closed = details.closedForApplicants {
-            builder.field("Приём откликов", closed ? "Закрыт" : "Открыт")
-        }
+        builder.field("Статус", vacancy.archiveStatusText)
+        builder.field("Приём откликов", vacancy.applicationStatusText)
         builder.field("Идентификатор вакансии", vacancy.id)
-        builder.field("Дата публикации", details.publishedAt?.nilIfBlank ?? vacancy.publishedAt?.nilIfBlank)
+        builder.field("Дата публикации", details.publishedAt?.nilIfBlank ?? vacancy.summary.publishedAt)
+        builder.chronology(vacancyID: vacancy.id, observationIDs: vacancy.observationIDs)
         if details.initialCreatedAt?.nilIfBlank != details.publishedAt?.nilIfBlank {
             builder.field("Первоначально создана", details.initialCreatedAt?.nilIfBlank)
         }
@@ -284,13 +315,8 @@ enum VacancyPDFFormatter {
         appendContacts(details.contacts, to: builder)
         appendEmployer(details.employer, to: builder)
         appendAdditionalConditions(details, to: builder)
+        builder.identify(context)
         return builder.document
-    }
-
-    private static func archiveStatus(for vacancy: VacancySearchResult) -> String {
-        if vacancy.isArchived { return "В архиве" }
-        if vacancy.archiveCheckedAt != nil || vacancy.details.archived == false { return "Активна" }
-        return "не проверен"
     }
 
     private static func appendAddress(_ address: HHVacancyAddress?, to builder: VacancyPDFDocumentBuilder) {
@@ -341,7 +367,9 @@ enum VacancyPDFFormatter {
     }
 
     private static func appendEmployment(_ details: HHVacancyDetails, to builder: VacancyPDFDocumentBuilder) {
+        let sectionStart = builder.document.length
         builder.section("Опыт, занятость и график")
+        let fieldsStart = builder.document.length
         builder.field("Требуемый опыт", value(details.experience))
         builder.field("Форма занятости", value(details.employmentForm) ?? value(details.employment))
         builder.field("График", value(details.schedule))
@@ -353,6 +381,9 @@ enum VacancyPDFFormatter {
         builder.field("Длительность вахты", joinedNames(details.flyInFlyOutDuration))
         builder.field("Стажировка", yesNo(details.internship))
         builder.field("Ночные смены", yesNo(details.nightShifts))
+        if builder.document.length == fieldsStart {
+            builder.document.deleteCharacters(in: NSRange(location: sectionStart, length: fieldsStart - sectionStart))
+        }
     }
 
     private static func descriptionHTML(for vacancy: VacancySearchResult) -> String? {
@@ -369,9 +400,9 @@ enum VacancyPDFFormatter {
             builder.html(importedDescription ?? VacancyHTMLAttributedText.plainText(html))
             return
         }
-        builder.notice("Полное описание из detail endpoint HH недоступно.")
+
         if let snippet = vacancy.summary.snippet?.plainText.nilIfBlank {
-            builder.subheading("Сохранённые фрагменты поисковой карточки")
+            builder.subheading("Фрагменты поисковой карточки hh.ru")
             builder.plain(snippet)
         }
     }
@@ -468,6 +499,16 @@ enum VacancyPDFFormatter {
 }
 
 struct VacancyStatisticsReport: Sendable {
+    var documentID = UUID().uuidString.lowercased()
+    var periodFrom: Date? = nil
+    var periodTo: Date? = nil
+    var categoryName = "Все вакансии"
+    var documentContext: DocumentContext {
+        DocumentContext(id: documentID, kind: periodFrom == nil ? "Реестр вакансий по результатам автоматизированного мониторинга" : "Отчет о результатах мониторинга вакансий за указанный период",
+                        vacancyIDs: entries.map(\.id), observationIDs: entries.flatMap(\.observationIDs),
+                        filters: ["Работодатель": employerName, "Регион": regionName, "Категория": categoryName, "Список": modeName],
+                        periodFrom: periodFrom, periodTo: periodTo, createdAt: createdAt)
+    }
     struct Entry: Sendable {
         let id: String
         let name: String
@@ -478,18 +519,33 @@ struct VacancyStatisticsReport: Sendable {
         let regionName: String
         let isArchived: Bool
         let isFieldInstitution: Bool
+        let status: String
+        let applicationStatus: String
+        let observationIDs: [String]
+        let vacancyURL: String?
+        let classificationReason: String?
         let hasSalary: Bool
 
         init(_ vacancy: VacancySearchResult) {
+            observationIDs = vacancy.observationIDs
+            vacancyURL = vacancy.alternateURL
+            classificationReason = vacancy.isFieldInstitution ? vacancy.fieldInstitution.reason : nil
             id = vacancy.id
             name = vacancy.name
             publishedAt = vacancy.publishedAt
             employerID = vacancy.employerID ?? "unknown:\(vacancy.employerName)"
             employerName = vacancy.employerName
-            regionID = vacancy.location.filterID
-            regionName = vacancy.location.subjectName ?? vacancy.areaName
+            if vacancy.location == .unknown, let area = vacancy.summary.area, let name = area.name?.nilIfBlank {
+                regionID = "hh-area:" + (area.id ?? name)
+                regionName = name
+            } else {
+                regionID = vacancy.location.filterID
+                regionName = vacancy.location.subjectName ?? vacancy.areaName
+            }
             isArchived = vacancy.isArchived
             isFieldInstitution = vacancy.isFieldInstitution
+            status = vacancy.archiveStatusText
+            applicationStatus = vacancy.applicationStatusText
             hasSalary = vacancy.salaryText?.nilIfBlank != nil
         }
     }
@@ -515,7 +571,7 @@ struct VacancyStatisticsReport: Sendable {
             case let (lhs?, rhs?) where lhs != rhs: return lhs > rhs
             case (_?, nil): return true
             case (nil, _?): return false
-            default: return left.entry.id < right.entry.id
+            default: return (left.entry.id, left.entry.observationIDs.joined()) < (right.entry.id, right.entry.observationIDs.joined())
             }
         }
     }
@@ -525,7 +581,7 @@ struct VacancyStatisticsReport: Sendable {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "ru_RU")
         formatter.timeZone = TimeZone(identifier: timeZoneIdentifier) ?? TimeZone(secondsFromGMT: 0)
-        formatter.dateFormat = "dd.MM.yyyy HH:mm"
+        formatter.dateFormat = "dd.MM.yyyy HH:mm:ss XXX"
         let ordered = orderedEntries()
         let dated = ordered.compactMap(\.date)
         let employers = Dictionary(grouping: entries, by: \.employerID)
@@ -533,20 +589,13 @@ struct VacancyStatisticsReport: Sendable {
         let archived = entries.filter(\.isArchived).count
         let salaried = entries.filter(\.hasSalary).count
 
-        builder.banner("ВАКАНСИИ HEADHUNTER")
-        builder.title("Статистический отчёт")
-        builder.provenance("Сформирован \(formatter.string(from: createdAt)); часовой пояс: \(timeZoneIdentifier)")
-        builder.section("Конфигурация фильтров")
-        builder.field("Список", modeName)
-        builder.field("Работодатель", employerName)
-        builder.field("Регион", regionName)
-        builder.plain(sourceNote)
+        builder.documentHeader(documentContext)
         builder.section("Общая статистика")
         builder.field("Всего вакансий", String(entries.count))
         builder.field("Полевые учреждения", String(entries.filter(\.isFieldInstitution).count))
         builder.field("Работодателей", String(employers.count))
         builder.field("Регионов / территориальных групп", String(regions.count))
-        builder.field("Активных по локальным данным", String(entries.count - archived))
+        builder.field("Активных по сведениям hh.ru", String(entries.filter { $0.status == "Активна" }.count))
         builder.field("В архиве", String(archived))
         builder.field("С указанной зарплатой", String(salaried))
         builder.field("Без указанной зарплаты", String(entries.count - salaried))
@@ -570,87 +619,120 @@ struct VacancyStatisticsReport: Sendable {
         if ordered.isEmpty { builder.plain("Под выбранными фильтрами вакансий нет.") }
         for (index, row) in ordered.enumerated() {
             try Task.checkCancellation()
-            let date = row.date.map { formatter.string(from: $0) } ?? "Дата размещения не указана"
-            builder.vacancyListItem(index: index + 1, name: row.entry.name, publishedAt: date)
+            let date = row.entry.publishedAt ?? "Не указана"
+            builder.vacancyListItem(index: index + 1, entry: row.entry, publishedAt: date)
         }
+        builder.identify(documentContext)
         return builder.document
     }
 }
 
-private final class VacancyPDFDocumentBuilder {
+final class VacancyPDFDocumentBuilder {
     private(set) var document = NSMutableAttributedString()
 
     // Computed: NSFont is not Sendable, so no shared static instances across actors.
-    private static var bodyFont: NSFont { .systemFont(ofSize: 7.5) }
-    private static var labelFont: NSFont { .systemFont(ofSize: 9.5, weight: .semibold) }
-    private static var headingFont: NSFont { .systemFont(ofSize: 13, weight: .bold) }
-    private static var titleFont: NSFont { .systemFont(ofSize: 18, weight: .bold) }
-    private static var bannerFont: NSFont { .systemFont(ofSize: 7.5, weight: .semibold) }
+    private static var bodyFont: NSFont { VacancyPDFStyle.bodyFont }
+    private static var labelFont: NSFont { VacancyPDFStyle.labelFont }
+    private static var headingFont: NSFont { VacancyPDFStyle.headingFont }
+    private static var titleFont: NSFont { VacancyPDFStyle.titleFont }
+    private static var bannerFont: NSFont { VacancyPDFStyle.font(ofSize: 7.5, weight: .medium) }
+
+    func identify(_ context: DocumentContext) {
+        document.addAttributes([VacancyPDFStyle.documentID: context.id, VacancyPDFStyle.documentKind: context.kind], range: NSRange(location: 0, length: document.length))
+    }
+
+    func documentHeader(_ context: DocumentContext) {
+        banner("HHVacancyCBR")
+        title(context.kind)
+        field("Идентификатор документа", context.id)
+        field("Сформирован", context.createdAt)
+        field("Источник", "HeadHunter (hh.ru)")
+        field("Способ получения", context.observationIDs.isEmpty ? "Сохранённые нормализованные данные HHVacancyCBR" : "HeadHunter API · GET · сохранённые ответы URLSession")
+        field("Версия приложения / сборка", context.applicationVersion + " / " + context.build)
+        if let from = context.periodFrom, let to = context.periodTo { field("Период наблюдений", from + " – " + to) }
+        for key in context.filters.keys.sorted() { field(key, context.filters[key]) }
+        field("Количество вакансий", String(Set(context.vacancyIDs).count))
+    }
+
+    func chronology(vacancyID: String, observationIDs: [String]) {
+        // Only observations explicitly bound to the selected snapshot can describe it.
+        let selected = observationIDs.compactMap { try? DocumentArchive.shared.observation($0) }
+        guard let cutoff = selected.map(\.receivedAt).max() else { return }
+        let records = ((try? DocumentArchive.shared.observations()) ?? []).filter { $0.vacancyIDs.contains(vacancyID) && $0.receivedAt <= cutoff }
+        field("Первое обнаружение HHVacancyCBR", records.first?.receivedAt)
+        field("Последнее успешное наблюдение", records.last?.receivedAt)
+        for record in records { field("Успешное наблюдение " + record.id, record.receivedAt) }
+    }
 
     func banner(_ text: String) {
         append(text.uppercased() + "\n", attributes: [
             .font: Self.bannerFont,
-            .foregroundColor: NSColor(calibratedWhite: 0.35, alpha: 1),
-            .kern: 1.1
+            .foregroundColor: NSColor.black,
+            .kern: 1.2,
+            .paragraphStyle: paragraphStyle(lineSpacing: 1, paragraphSpacing: 12),
+            VacancyPDFStyle.keepWithNext: true
         ])
     }
 
     func title(_ text: String) {
-        let style = paragraphStyle(lineSpacing: 1.5, paragraphSpacing: 8)
-        append(text + "\n", attributes: [.font: Self.titleFont, .foregroundColor: NSColor.black, .paragraphStyle: style])
+        let style = paragraphStyle(lineSpacing: 3, paragraphSpacing: 12)
+        append(text + "\n", attributes: [.font: Self.titleFont, .foregroundColor: VacancyPDFStyle.ink, .paragraphStyle: style, VacancyPDFStyle.keepWithNext: true])
     }
 
     func provenance(_ text: String) {
         append(text + "\n", attributes: [
-            .font: NSFont.systemFont(ofSize: 8.5),
-            .foregroundColor: NSColor(calibratedWhite: 0.3, alpha: 1)
+            .font: VacancyPDFStyle.font(ofSize: 8.5),
+            .foregroundColor: VacancyPDFStyle.muted,
+            .paragraphStyle: paragraphStyle(lineSpacing: 2, paragraphSpacing: 10)
         ])
     }
 
     func notice(_ text: String) {
-        let style = paragraphStyle(lineSpacing: 1.5, paragraphSpacing: 8, headIndent: 10, firstLineHeadIndent: 10)
+        let style = paragraphStyle(lineSpacing: 2, paragraphSpacing: 10)
         append(text + "\n", attributes: [
-            .font: NSFont.systemFont(ofSize: 8.5, weight: .medium),
-            .foregroundColor: NSColor(calibratedWhite: 0.2, alpha: 1),
-            .backgroundColor: NSColor(calibratedWhite: 0.94, alpha: 1),
+            .font: VacancyPDFStyle.font(ofSize: 8.5, weight: .medium),
+            .foregroundColor: NSColor.black,
             .paragraphStyle: style
         ])
     }
 
     func section(_ text: String) {
-        let style = paragraphStyle(lineSpacing: 1, paragraphSpacing: 6, paragraphSpacingBefore: 14)
+        let style = paragraphStyle(lineSpacing: 2, paragraphSpacing: 8, paragraphSpacingBefore: 18)
         append(text + "\n", attributes: [
             .font: Self.headingFont,
-            .foregroundColor: NSColor(calibratedWhite: 0.08, alpha: 1),
-            .paragraphStyle: style
+            .foregroundColor: VacancyPDFStyle.ink,
+            .paragraphStyle: style,
+            VacancyPDFStyle.keepWithNext: true
         ])
     }
 
     func subheading(_ text: String) {
-        append(text + "\n", attributes: [.font: Self.labelFont, .foregroundColor: NSColor.black])
+        append(text + "\n", attributes: [.font: Self.labelFont, .foregroundColor: VacancyPDFStyle.muted])
     }
 
     func field(_ label: String, _ value: String?) {
         guard let value = value?.nilIfBlank else { return }
         let line = NSMutableAttributedString(string: label + ": ", attributes: [
-            .font: Self.labelFont, .foregroundColor: NSColor.black
+            .font: Self.labelFont, .foregroundColor: VacancyPDFStyle.muted
         ])
         line.append(NSAttributedString(string: value + "\n", attributes: [
             .font: Self.bodyFont,
-            .foregroundColor: NSColor.black,
+            .foregroundColor: VacancyPDFStyle.ink,
             .paragraphStyle: paragraphStyle(lineSpacing: 1.5, paragraphSpacing: 2)
         ]))
+        line.addAttribute(.paragraphStyle, value: paragraphStyle(lineSpacing: 1.5, paragraphSpacing: 3),
+                          range: NSRange(location: 0, length: line.length))
         document.append(line)
     }
 
     func linkField(_ label: String, _ value: String?) {
         guard let value = value?.nilIfBlank else { return }
         let line = NSMutableAttributedString(string: label + ": ", attributes: [
-            .font: Self.labelFont, .foregroundColor: NSColor.black
+            .font: Self.labelFont, .foregroundColor: VacancyPDFStyle.muted
         ])
         var attributes: [NSAttributedString.Key: Any] = [
             .font: Self.bodyFont,
-            .foregroundColor: NSColor(calibratedRed: 0.05, green: 0.23, blue: 0.46, alpha: 1),
+            .foregroundColor: VacancyPDFStyle.ink,
             .paragraphStyle: paragraphStyle(lineSpacing: 1.5, paragraphSpacing: 2, lineBreakMode: .byCharWrapping)
         ]
         if let url = URL(string: value), ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
@@ -663,27 +745,52 @@ private final class VacancyPDFDocumentBuilder {
     func plain(_ text: String) {
         append(text + "\n", attributes: [
             .font: Self.bodyFont,
-            .foregroundColor: NSColor.black,
+            .foregroundColor: VacancyPDFStyle.ink,
             .paragraphStyle: paragraphStyle(lineSpacing: 2.2, paragraphSpacing: 7)
         ])
     }
 
-    func vacancyListItem(index: Int, name: String, publishedAt: String) {
-        append("\(index). \(name): \(publishedAt)\n", attributes: [
-            .font: Self.bodyFont,
-            .foregroundColor: NSColor.black,
-            .paragraphStyle: paragraphStyle(lineSpacing: 3, paragraphSpacing: 5)
+    func vacancyListItem(index: Int, entry: VacancyStatisticsReport.Entry, publishedAt: String) {
+        // Soft line breaks keep the complete record in one paragraph for pagination.
+        let item = NSMutableAttributedString(string: "\(index). \(entry.name)\u{2028}", attributes: [
+            .font: VacancyPDFStyle.font(ofSize: 11, weight: .medium), .foregroundColor: VacancyPDFStyle.ink
         ])
+        var fields = [("Идентификатор вакансии", entry.id), ("Дата публикации", publishedAt),
+                      ("Статус", entry.status), ("Приём откликов", entry.applicationStatus),
+                      ("Работодатель hh.ru", entry.employerName + " · ID " + entry.employerID)]
+        if let url = entry.vacancyURL { fields.append(("URL вакансии", url)) }
+        if !entry.employerID.hasPrefix("unknown:") { fields.append(("URL работодателя", "https://hh.ru/employer/" + entry.employerID)) }
+        if let reason = entry.classificationReason { fields.append(("Внутренняя категория HHVacancyCBR", "Полевые учреждения")); fields.append(("Основание", reason)) }
+        let selected = entry.observationIDs.compactMap { try? DocumentArchive.shared.observation($0) }
+        if let cutoff = selected.map(\.receivedAt).max() {
+            let history = ((try? DocumentArchive.shared.observations()) ?? []).filter { $0.vacancyIDs.contains(entry.id) && $0.receivedAt <= cutoff }
+            if let first = history.first { fields.append(("Первое обнаружение HHVacancyCBR", first.receivedAt)) }
+            if let last = history.last { fields.append(("Последнее успешное наблюдение", last.receivedAt)) }
+        }
+        for id in entry.observationIDs {
+            if let record = try? DocumentArchive.shared.observation(id) { fields.append(("Наблюдение " + id, record.receivedAt)) }
+        }
+        for (offset, field) in fields.enumerated() {
+            item.append(NSAttributedString(string: field.0 + ": ", attributes: [
+                .font: Self.bodyFont, .foregroundColor: VacancyPDFStyle.muted
+            ]))
+            var attributes: [NSAttributedString.Key: Any] = [.font: Self.bodyFont, .foregroundColor: VacancyPDFStyle.ink]
+            if field.0.hasPrefix("URL"), let url = URL(string: field.1) { attributes[.link] = url }
+            item.append(NSAttributedString(string: field.1 + (offset == fields.count - 1 ? "\n" : "\u{2028}"), attributes: attributes))
+        }
+        item.addAttribute(.paragraphStyle, value: paragraphStyle(lineSpacing: 3, paragraphSpacing: 16),
+                          range: NSRange(location: 0, length: item.length))
+        document.append(item)
     }
 
     func bullets(_ values: [String]) {
-        let list = NSTextList(markerFormat: .disc, options: 0)
+        let list = NSTextList(markerFormat: .init(rawValue: "–"), options: 0)
         let style = paragraphStyle(lineSpacing: 1.5, paragraphSpacing: 3, headIndent: 18, firstLineHeadIndent: 4)
         style.textLists = [list]
         style.tabStops = [NSTextTab(textAlignment: .left, location: style.headIndent)]
         for value in values where value.nilIfBlank != nil {
-            append("•\t\(value)\n", attributes: [
-                .font: Self.bodyFont, .foregroundColor: NSColor.black, .paragraphStyle: style
+            append("–\t\(value)\n", attributes: [
+                .font: Self.bodyFont, .foregroundColor: VacancyPDFStyle.ink, .paragraphStyle: style
             ])
         }
     }
@@ -692,7 +799,7 @@ private final class VacancyPDFDocumentBuilder {
         if !document.string.hasSuffix("\n\n") {
             document.append(NSAttributedString(
                 string: "\n",
-                attributes: [.font: Self.bodyFont, .foregroundColor: NSColor.black]
+                attributes: [.font: Self.bodyFont, .foregroundColor: VacancyPDFStyle.ink]
             ))
         }
         document.append(content)
@@ -753,7 +860,7 @@ enum VacancyHTMLAttributedText {
     static func plainText(_ html: String) -> NSAttributedString {
         NSAttributedString(
             string: html.readableHTMLText,
-            attributes: [.font: NSFont.systemFont(ofSize: 7.5), .foregroundColor: NSColor.black]
+            attributes: [.font: VacancyPDFStyle.bodyFont, .foregroundColor: VacancyPDFStyle.ink]
         )
     }
 
@@ -774,14 +881,20 @@ enum VacancyHTMLAttributedText {
         }
 
         let fullRange = NSRange(location: 0, length: imported.length)
-        imported.addAttribute(.foregroundColor, value: NSColor.black, range: fullRange)
+        imported.addAttribute(.foregroundColor, value: VacancyPDFStyle.ink, range: fullRange)
         imported.enumerateAttribute(.font, in: fullRange) { value, range, _ in
-            let source = value as? NSFont ?? NSFont.systemFont(ofSize: 11.5)
-            let size = min(max(source.pointSize, 10.5), 19) - 4
+            let source = value as? NSFont ?? VacancyPDFStyle.font(ofSize: 11.5)
+            let size = min(max(source.pointSize - 2, VacancyPDFStyle.bodySize), 16)
             var traits = source.fontDescriptor.symbolicTraits
             traits.remove(.monoSpace)
-            let descriptor = NSFont.systemFont(ofSize: size).fontDescriptor.withSymbolicTraits(traits)
+            let descriptor = VacancyPDFStyle.font(ofSize: size).fontDescriptor.withSymbolicTraits(traits)
             imported.addAttribute(.font, value: NSFont(descriptor: descriptor, size: size) ?? source, range: range)
+        }
+        // AppKit imports unordered lists with disc/circle/square markers.
+        // Replace only paragraph-leading markers, preserving numbered lists and prose.
+        let markers = try! NSRegularExpression(pattern: #"(?m)^[\t ]*([•◦▪●○■⁃])(?=[\t ])"#)
+        for match in markers.matches(in: imported.string, range: NSRange(location: 0, length: imported.length)).reversed() {
+            imported.replaceCharacters(in: match.range(at: 1), with: "–")
         }
         normalizeParagraphStyles(in: imported)
         return imported
@@ -817,6 +930,9 @@ enum VacancyHTMLAttributedText {
             ) as? NSParagraphStyle
             let style = (original?.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
             let hasList = !style.textLists.isEmpty
+            if content.hasPrefix("–"), hasList {
+                style.textLists = style.textLists.map { _ in NSTextList(markerFormat: .init(rawValue: "–"), options: 0) }
+            }
             let isBoldHeading = !content.isEmpty
                 && content.count <= 80
                 && paragraphIsBold(text, range: contentsRange)
@@ -955,16 +1071,18 @@ struct FavoritePDFExportProgress: Equatable {
 /// imported on the main actor. The attributed string is not mutated after creation.
 struct PDFVacancySnapshot: @unchecked Sendable {
     let value: VacancySearchResult
+    let context: DocumentContext
     let importedDescription: NSAttributedString?
 
     @MainActor
     init(value: VacancySearchResult) {
         self.value = value
+        context = DocumentContext.vacancy(value)
         importedDescription = VacancyPDFFormatter.importedDescription(for: value)
     }
 
     var attributedDocument: NSAttributedString {
-        VacancyPDFFormatter.attributedDocument(for: value, importedDescription: importedDescription)
+        VacancyPDFFormatter.attributedDocument(for: value, importedDescription: importedDescription, context: context)
     }
 }
 
@@ -1111,6 +1229,7 @@ actor PDFExportWorker {
     private struct PreparedPart: Sendable {
         let data: Data
         let pageCount: Int
+        let context: DocumentContext
     }
 
     private var preparedParts: [PreparedPart]?
@@ -1129,33 +1248,20 @@ actor PDFExportWorker {
         preparedParts = nil
         try Task.checkCancellation()
         var parts: [PreparedPart] = []
-        var currentPages: [FavoriteVacanciesPDFExporter.Page] = []
-        currentPages.reserveCapacity(FavoriteVacanciesPDFExporter.maximumPagesPerFile)
+        var current: [PDFVacancySnapshot] = []
+        var count = 0
         var totalPages = 0
-
         for (index, vacancy) in vacancies.values.enumerated() {
             try Task.checkCancellation()
-            let pages = autoreleasepool {
-                FavoriteVacanciesPDFExporter.pages(for: vacancy.attributedDocument)
+            let estimate = FavoriteVacanciesPDFExporter.pages(for: vacancy.attributedDocument).count
+            if !current.isEmpty && count + estimate > FavoriteVacanciesPDFExporter.maximumPagesPerFile {
+                let part = try prepareRegistry(current); parts.append(part); totalPages += part.pageCount
+                current = []; count = 0
             }
-            if !currentPages.isEmpty,
-               currentPages.count + pages.count > FavoriteVacanciesPDFExporter.maximumPagesPerFile {
-                parts.append(try preparedPart(for: currentPages))
-                totalPages += currentPages.count
-                currentPages.removeAll(keepingCapacity: true)
-            }
-            if pages.count > FavoriteVacanciesPDFExporter.maximumPagesPerFile {
-                parts.append(try preparedPart(for: pages))
-                totalPages += pages.count
-            } else {
-                currentPages.append(contentsOf: pages)
-            }
+            current.append(vacancy); count += estimate
             await progress(.init(completedVacancies: index + 1, totalVacancies: vacancies.values.count))
         }
-        if !currentPages.isEmpty {
-            parts.append(try preparedPart(for: currentPages))
-            totalPages += currentPages.count
-        }
+        if !current.isEmpty { let part = try prepareRegistry(current); parts.append(part); totalPages += part.pageCount }
         preparedParts = parts
         return PreparedExport(
             partCount: parts.count,
@@ -1167,15 +1273,39 @@ actor PDFExportWorker {
         preparedParts = nil
     }
 
-    private func preparedPart(
-        for pages: [FavoriteVacanciesPDFExporter.Page]
-    ) throws -> PreparedPart {
-        try Task.checkCancellation()
-        let data = try autoreleasepool {
-            try FavoriteVacanciesPDFExporter.pdfData(for: pages)
+    private func prepareRegistry(_ values: [PDFVacancySnapshot]) throws -> PreparedPart {
+        let context = DocumentContext(kind: "Реестр вакансий по результатам автоматизированного мониторинга",
+            vacancyIDs: values.map { $0.value.id }, observationIDs: values.flatMap { $0.value.observationIDs }, filters: ["Список": "Избранное"])
+        let pages = values.flatMap { snapshot in
+            FavoriteVacanciesPDFExporter.pages(for: VacancyPDFFormatter.attributedDocument(for: snapshot.value, importedDescription: snapshot.importedDescription, context: context))
         }
-        try FavoriteVacanciesPDFExporter.validatePDF(data: data, expectedPages: pages.count)
-        return PreparedPart(data: data, pageCount: pages.count)
+        try Task.checkCancellation()
+        let rendered = try documentedData(pages: pages, context: context)
+        return PreparedPart(data: rendered.data, pageCount: rendered.count, context: context)
+    }
+
+    private func documentedData(pages: [FavoriteVacanciesPDFExporter.Page], context: DocumentContext,
+                                didRenderPage: (@Sendable (Int) -> Void)? = nil) throws -> (data: Data, count: Int) {
+        let materials = try DocumentArchive.shared.materials(for: context)
+        var allPages = pages
+        for material in materials where material.path != "report.json" {
+            try Task.checkCancellation()
+            let builder = VacancyPDFDocumentBuilder()
+            builder.section("Первичные электронные материалы")
+            builder.field("Объект", material.path)
+            builder.field("Размер исходных байтов", String(material.data.count))
+            builder.field("Алгоритм", MaterialHash.algorithm)
+            builder.field("Хеш исходных байтов", try MaterialHash.digest(material.data))
+            if let text = String(data: material.data, encoding: .utf8) { builder.plain(text) }
+            builder.identify(context)
+            var materialPages = FavoriteVacanciesPDFExporter.pages(for: builder.document)
+            if material.type == "image/png", !materialPages.isEmpty { materialPages[materialPages.count - 1].imageData = material.data }
+            allPages += materialPages
+        }
+        let rendered = try FavoriteVacanciesPDFExporter.pdfData(for: allPages, didRenderPage: didRenderPage)
+        let data = try PDFOriginalMaterials.embed(materials, in: rendered)
+        try FavoriteVacanciesPDFExporter.validatePDF(data: data, expectedPages: allPages.count)
+        return (data, allPages.count)
     }
 
     func exportPersonal(
@@ -1188,9 +1318,9 @@ actor PDFExportWorker {
             FavoriteVacanciesPDFExporter.pages(for: vacancy.attributedDocument)
         }
         try Task.checkCancellation()
-        let data = try FavoriteVacanciesPDFExporter.pdfData(for: pages, didRenderPage: didRenderPage)
-        try FavoriteVacanciesPDFExporter.validatePDF(data: data, expectedPages: pages.count)
+        let data = try documentedData(pages: pages, context: vacancy.context, didRenderPage: didRenderPage).data
         try Task.checkCancellation()
+        _ = try DocumentArchive.shared.archive(pdf: data, context: vacancy.context)
         try data.write(to: destination, options: .atomic)
     }
 
@@ -1199,9 +1329,9 @@ actor PDFExportWorker {
         let pages = try autoreleasepool {
             try FavoriteVacanciesPDFExporter.pages(for: report.attributedDocument())
         }
-        let data = try FavoriteVacanciesPDFExporter.pdfData(for: pages)
-        try FavoriteVacanciesPDFExporter.validatePDF(data: data, expectedPages: pages.count)
+        let data = try documentedData(pages: pages, context: report.documentContext).data
         try Task.checkCancellation()
+        _ = try DocumentArchive.shared.archive(pdf: data, context: report.documentContext)
         try data.write(to: destination, options: .atomic)
     }
 
@@ -1211,6 +1341,7 @@ actor PDFExportWorker {
             throw FavoriteVacanciesPDFExporter.ExportError.missingPreparedExport
         }
         preparedParts = nil
+        for part in parts { _ = try DocumentArchive.shared.archive(pdf: part.data, context: part.context) }
         return try PDFNewFileWriter.write(parts.map(\.data), names: names, in: directory)
     }
 }
@@ -1221,6 +1352,7 @@ final class FavoriteVacanciesPDFExporter: FavoriteVacanciesPDFExporting {
 
     struct Page: @unchecked Sendable {
         let content: NSAttributedString
+        var imageData: Data? = nil
     }
 
     enum ExportError: LocalizedError {
@@ -1373,10 +1505,23 @@ final class FavoriteVacanciesPDFExporter: FavoriteVacanciesPDFExporting {
             var next = index
             let paragraph = source.paragraphRange(for: NSRange(location: lines[index].start, length: 0))
             if paragraph.location > lines[first].start {
-                while next > first + 1, lines[next].start > paragraph.location { next -= 1 }
+                var paragraphFirst = next
+                while paragraphFirst > first + 1, lines[paragraphFirst].start > paragraph.location { paragraphFirst -= 1 }
+                let paragraphLast = lines.lastIndex { $0.start < NSMaxRange(paragraph) } ?? index
+                // Oversized source paragraphs must use the remaining page space and continue.
+                if lines[paragraphLast].maxY - lines[paragraphFirst].minY <= pageHeight { next = paragraphFirst }
             }
-            pageStarts.append(next)
-            index = next + 1
+            var candidate = next
+            while candidate > first {
+                let previousParagraph = source.paragraphRange(for: NSRange(location: lines[candidate].start - 1, length: 0))
+                guard attributedText.attribute(VacancyPDFStyle.keepWithNext, at: previousParagraph.location, effectiveRange: nil) as? Bool == true else { break }
+                var previous = candidate - 1
+                while previous > first, lines[previous - 1].start >= previousParagraph.location { previous -= 1 }
+                guard previous > first, lines[index].maxY - lines[previous].minY <= pageHeight else { break }
+                candidate = previous
+            }
+            pageStarts.append(candidate)
+            index = candidate + 1
         }
 
         var pages: [Page] = []
@@ -1417,7 +1562,14 @@ final class FavoriteVacanciesPDFExporter: FavoriteVacanciesPDFExporting {
             context.scaleBy(x: 1, y: -1)
             NSGraphicsContext.saveGraphicsState()
             NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
-            page.content.draw(
+            if index > 0, page.content.length > 0,
+               let kind = page.content.attribute(VacancyPDFStyle.documentKind, at: 0, effectiveRange: nil) as? String {
+                (kind as NSString).draw(in: NSRect(x: VacancyPDFDefaults.horizontalMargin, y: 22, width: 483, height: 20),
+                                       withAttributes: [.font: VacancyPDFStyle.font(ofSize: 7), .foregroundColor: NSColor.black])
+            }
+            let monochromeContent = NSMutableAttributedString(attributedString: page.content)
+            monochromeContent.removeAttribute(.link, range: NSRange(location: 0, length: monochromeContent.length))
+            monochromeContent.draw(
                 with: NSRect(
                     x: VacancyPDFDefaults.horizontalMargin, y: VacancyPDFDefaults.verticalMargin,
                     width: VacancyPDFDefaults.paperSize.width - VacancyPDFDefaults.horizontalMargin * 2,
@@ -1425,6 +1577,46 @@ final class FavoriteVacanciesPDFExporter: FavoriteVacanciesPDFExporting {
                 ),
                 options: [.usesLineFragmentOrigin, .usesFontLeading]
             )
+            let linkStorage = NSTextStorage(attributedString: monochromeContent)
+            let linkLayout = NSLayoutManager()
+            let linkContainer = NSTextContainer(size: NSSize(width: VacancyPDFDefaults.paperSize.width - VacancyPDFDefaults.horizontalMargin * 2, height: .greatestFiniteMagnitude))
+            linkContainer.lineFragmentPadding = 0
+            linkStorage.addLayoutManager(linkLayout)
+            linkLayout.addTextContainer(linkContainer)
+            linkLayout.ensureLayout(for: linkContainer)
+            page.content.enumerateAttribute(.link, in: NSRange(location: 0, length: page.content.length)) { value, range, _ in
+                guard let value, let url = (value as? URL) ?? URL(string: String(describing: value)) else { return }
+                let glyphs = linkLayout.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+                linkLayout.enumerateEnclosingRects(forGlyphRange: glyphs, withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0), in: linkContainer) { rect, _ in
+                    context.setURL(url as CFURL, for: CGRect(x: rect.minX + VacancyPDFDefaults.horizontalMargin,
+                        y: VacancyPDFDefaults.paperSize.height - VacancyPDFDefaults.verticalMargin - rect.maxY,
+                        width: rect.width, height: rect.height))
+                }
+            }
+            if let bytes = page.imageData, let source = CGImageSourceCreateWithData(bytes as CFData, nil),
+               let bitmap = CGImageSourceCreateImageAtIndex(source, 0, nil) {
+                let ratio = min(480 / CGFloat(bitmap.width), 520 / CGFloat(bitmap.height))
+                let width = CGFloat(bitmap.width) * ratio, height = CGFloat(bitmap.height) * ratio
+                context.saveGState()
+                context.translateBy(x: VacancyPDFDefaults.horizontalMargin, y: 230 + height)
+                context.scaleBy(x: 1, y: -1)
+                context.draw(bitmap, in: CGRect(x: 0, y: 0, width: width, height: height))
+                context.restoreGState()
+            }
+            let footerY = VacancyPDFDefaults.paperSize.height - 30
+            let rule = NSBezierPath()
+            rule.move(to: NSPoint(x: VacancyPDFDefaults.horizontalMargin, y: footerY - 8))
+            rule.line(to: NSPoint(x: VacancyPDFDefaults.paperSize.width - VacancyPDFDefaults.horizontalMargin, y: footerY - 8))
+            NSColor(calibratedWhite: 0.82, alpha: 1).setStroke()
+            rule.lineWidth = 0.4
+            rule.stroke()
+            let footerAttributes: [NSAttributedString.Key: Any] = [
+                .font: VacancyPDFStyle.font(ofSize: 7), .foregroundColor: VacancyPDFStyle.muted
+            ]
+            let documentID = page.content.length > 0 ? page.content.attribute(VacancyPDFStyle.documentID, at: 0, effectiveRange: nil) as? String : nil
+            (("HHVacancyCBR · " + (documentID ?? "")) as NSString).draw(at: NSPoint(x: VacancyPDFDefaults.horizontalMargin, y: footerY), withAttributes: footerAttributes)
+            let pageLabel = "\(index + 1) / \(pages.count)" as NSString
+            pageLabel.draw(at: NSPoint(x: VacancyPDFDefaults.paperSize.width - VacancyPDFDefaults.horizontalMargin - pageLabel.size(withAttributes: footerAttributes).width, y: footerY), withAttributes: footerAttributes)
             NSGraphicsContext.restoreGraphicsState()
             context.restoreGState()
             context.endPDFPage()

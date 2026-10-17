@@ -9,6 +9,18 @@ final class HHVacancyCBRUITests: XCTestCase {
         return app
     }
 
+    func testArchiveUsesPDFOnlyAndKeepsMainToolbar() {
+        let app = launch()
+        let archive = app.buttons["История и архив"]
+        XCTAssertTrue(archive.waitForExistence(timeout: 5))
+        archive.click()
+        XCTAssertTrue(app.staticTexts["История наблюдений и архив документов"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Комплект ZIP"].exists)
+        XCTAssertTrue(app.buttons["Отчёт за период в PDF"].exists)
+        app.buttons["Закрыть"].click()
+        XCTAssertTrue(app.buttons["searchVacanciesButton"].exists)
+    }
+
     func testSearchShowsConfiguredVacanciesAndLazyDetails() {
         let app = launch()
         let search = app.buttons["searchVacanciesButton"]
@@ -205,26 +217,6 @@ final class HHVacancyCBRUITests: XCTestCase {
         XCTAssertEqual(report.label, "Статистика в PDF")
         XCTAssertEqual(report.frame.height, 32, accuracy: 2)
         XCTAssertEqual(app.staticTexts["displayedVacancyCount"].value as? String, "Показано вакансий: 0")
-    }
-
-    func testInformationSecurityLabelTakesPriorityAndPersistsInFavorites() {
-        let app = launch(scenario: "security")
-        app.buttons["searchVacanciesButton"].click()
-        XCTAssertTrue(app.staticTexts["informationSecurityLabel.ui-security"].waitForExistence(timeout: 8))
-        XCTAssertFalse(app.staticTexts["technologyBadge.ui-security"].exists)
-        XCTAssertTrue(app.staticTexts["technologyBadge.ui-1"].exists)
-        XCTAssertFalse(app.staticTexts["informationSecurityLabel.ui-2"].exists)
-        app.buttons["favoriteVacancy.ui-security"].click()
-        app.buttons["expandVacancy.ui-security"].click()
-        XCTAssertTrue(app.staticTexts["Развиваем средства защиты данных и безопасные цифровые сервисы."].waitForExistence(timeout: 5))
-        let attachment = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
-        attachment.name = "Security card with plain label and full description"
-        attachment.lifetime = .keepAlways
-        add(attachment)
-        app.radioButtons.matching(NSPredicate(format: "label BEGINSWITH %@", "Избранное")).firstMatch.click()
-        XCTAssertTrue(app.staticTexts["informationSecurityLabel.ui-security"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.staticTexts["technologyBadge.ui-security"].exists)
-        XCTAssertTrue(app.buttons["favoriteVacancy.ui-security"].label.contains("В избранном"))
     }
 
     func testCancellingRefreshKeepsPreviousResults() {

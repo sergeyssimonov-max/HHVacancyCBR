@@ -29,6 +29,7 @@ final class VacancySearchViewModel: ObservableObject {
     private static let publicationDateParser = HHPublicationDateParser()
 
     @Published private(set) var results: [VacancySearchResult] = []
+    @Published private(set) var configuredEmployers: [EmployerConfigurationEntry] = []
     @Published private(set) var favorites: [FavoriteVacancyRecord] = []
     @Published private(set) var expandedVacancyID: String?
     @Published private(set) var isLoading = false
@@ -173,11 +174,27 @@ final class VacancySearchViewModel: ObservableObject {
     }
     var displayedVacancyCountMessage: String { "Показано вакансий: \(displayedResults.count)" }
 
+    var emptyResultsMessage: String {
+        if !isShowingFavorites, selectedEmployerID != "all",
+           !results.contains(where: { $0.employerID == selectedEmployerID }),
+           let employer = configuredEmployers.first(where: { $0.id == selectedEmployerID }) {
+            return "Работодатель «\(employer.name)» включён в поиск. В сохранённой выборке hh.ru его вакансий нет. Нажмите «Обновить», чтобы повторить поиск."
+        }
+        return "Для выбранных работодателей и фильтров в текущей выборке вакансий нет."
+    }
+
     var employerFilterOptions: [VacancyFilterOption] {
         var titlesByID: [String: String] = [:]
         for result in unfilteredResults {
             guard let id = result.employerID, titlesByID[id] == nil else { continue }
             titlesByID[id] = result.employerName
+        }
+        // A configured employer remains selectable even when HH returns no vacancies.
+        // Favorites retain their own scope: only employers of saved vacancies belong there.
+        if !isShowingFavorites {
+            for employer in configuredEmployers where titlesByID[employer.id] == nil {
+                titlesByID[employer.id] = employer.name
+            }
         }
         let values = titlesByID.map { VacancyFilterOption(id: $0.key, title: $0.value) }
         return [.init(id: "all", title: "Все работодатели")] + values.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
@@ -241,6 +258,8 @@ final class VacancySearchViewModel: ObservableObject {
                currentDate() >= nextPersistenceRetryAt { startPersistenceDriver() }
             return
         }
+        do { configuredEmployers = try employerStore.loadOrCreate().employers }
+        catch { errorMessage = "Не удалось прочитать список работодателей: \(error.localizedDescription)" }
         do {
             favorites = try favoritesStore.load().sorted { $0.favoritedAt > $1.favoritedAt }
             isFavoritesPersistenceWritable = true
@@ -321,6 +340,7 @@ final class VacancySearchViewModel: ObservableObject {
         defer { isLoading = false }
         do {
             let employers = try employerStore.loadOrCreate().employers
+            configuredEmployers = employers
             statusMessage = "Загружается справочник регионов."
             let areaSnapshot = try await areaStore.load(using: apiClient)
             if let warning = areaSnapshot.warning { statusMessage = warning }
@@ -756,15 +776,9 @@ final class VacancySearchViewModel: ObservableObject {
         let employer = employerFilterOptions.first { $0.id == selectedEmployerID }?.title ?? selectedEmployerID
         let region = regionFilterOptions.first { $0.id == selectedRegionID }?.title ?? selectedRegionID
         var note = "Категория: \(fieldInstitutionsOnly ? "Полевые учреждения" : "Все вакансии"). "
-        note += "Отчёт по локальной выборке на момент нажатия кнопки. Дополнительная проверка HH.ru не выполнялась."
-        if let cache {
-            note += " Последняя загрузка общего списка: \(cache.updatedAt.formatted(date: .numeric, time: .shortened))."
-        }
-        if let cache, !cache.issues.isEmpty {
-            note += " Выгрузка общего списка неполная, работодателей с пропусками: \(cache.issues.count)."
-        }
-        if errorMessage != nil { note += " Последнее обновление не завершено; использованы сохранённые данные." }
-        return VacancyStatisticsReport(
+        if let cache, !cache.issues.isEmpty { note += "Выгрузка общего списка неполная, работодателей с пропусками: \(cache.issues.count)." }
+        if errorMessage != nil { note += " Последнее обновление не завершено" }
+        var report = VacancyStatisticsReport(
             entries: displayedResults.map(VacancyStatisticsReport.Entry.init),
             modeName: displayMode.rawValue,
             employerID: selectedEmployerID,
@@ -775,6 +789,9 @@ final class VacancySearchViewModel: ObservableObject {
             timeZoneIdentifier: TimeZone.current.identifier,
             sourceNote: note
         )
+        report.categoryName = fieldInstitutionsOnly ? "Полевые учреждения" : "Все вакансии"
+        if cache?.issues.isEmpty == false || errorMessage != nil { DocumentArchive.shared.diagnostic("Экспорт сохранённой выборки после неполного обновления") }
+        return report
     }
 
     func exportStatisticsPDF() async {

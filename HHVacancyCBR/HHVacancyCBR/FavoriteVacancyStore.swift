@@ -1,7 +1,9 @@
 import Foundation
 
 struct FavoriteVacancyRecord: Codable, Equatable, Identifiable, Sendable {
+    var observationID: String?
     let id: String
+    var closedForApplicants: Bool?
     var fieldInstitutionEvidence: FieldInstitutionClassification?
     var name: String
     var employerID: String?
@@ -20,6 +22,8 @@ struct FavoriteVacancyRecord: Codable, Equatable, Identifiable, Sendable {
     var updatedAt: Date
 
     init(result: VacancySearchResult, favoritedAt: Date, updatedAt: Date, archiveCheckedAt: Date? = nil) {
+        observationID = result.summary.observationID
+        closedForApplicants = result.closedForApplicants
         fieldInstitutionEvidence = result.fieldInstitution
         id = result.id
         name = result.name
@@ -42,6 +46,8 @@ struct FavoriteVacancyRecord: Codable, Equatable, Identifiable, Sendable {
     @discardableResult
     mutating func update(from result: VacancySearchResult, at date: Date) -> Bool {
         let previous = self
+        observationID = result.summary.observationID ?? observationID
+        closedForApplicants = result.closedForApplicants ?? closedForApplicants
         if result.isFieldInstitution { fieldInstitutionEvidence = result.fieldInstitution }
         name = result.name.nilIfBlank ?? name
         employerID = result.employerID ?? employerID
@@ -79,6 +85,8 @@ struct FavoriteVacancyRecord: Codable, Equatable, Identifiable, Sendable {
             department: departmentName.map { HHNamedItem(name: $0) },
             publishedAt: publishedAt
         )
+        summary.observationID = observationID
+        summary.closedForApplicants = closedForApplicants
         summary.fieldInstitutionEvidence = fieldInstitutionEvidence
         let details = detailsSnapshot ?? HHVacancyDetails(
             id: id,
@@ -88,7 +96,7 @@ struct FavoriteVacancyRecord: Codable, Equatable, Identifiable, Sendable {
             salary: nil,
             alternateURL: alternateURL,
             description: descriptionHTML,
-            archived: isArchived,
+            archived: isArchived ? true : (archiveCheckedAt != nil ? false : nil),
             department: departmentName.map { HHNamedItem(name: $0) }
         )
         return VacancySearchResult(
@@ -104,6 +112,8 @@ struct FavoriteVacancyRecord: Codable, Equatable, Identifiable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
+        case observationID
+        case closedForApplicants
         case fieldInstitutionEvidence
         case id, name, employerID, employerName, departmentName, publishedAt, location, salaryText, alternateURL
         case snippet, descriptionHTML, detailsSnapshot, isArchived, archiveCheckedAt, favoritedAt, updatedAt
@@ -111,6 +121,8 @@ struct FavoriteVacancyRecord: Codable, Equatable, Identifiable, Sendable {
 
     func encode(to encoder: Encoder) throws {
         var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encodeIfPresent(observationID, forKey: .observationID)
+        try values.encodeIfPresent(closedForApplicants, forKey: .closedForApplicants)
         try values.encodeIfPresent(fieldInstitutionEvidence, forKey: .fieldInstitutionEvidence)
         try values.encode(id, forKey: .id)
         try values.encode(name, forKey: .name)
@@ -132,6 +144,8 @@ struct FavoriteVacancyRecord: Codable, Equatable, Identifiable, Sendable {
 
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
+        observationID = try values.decodeIfPresent(String.self, forKey: .observationID)
+        closedForApplicants = try values.decodeIfPresent(Bool.self, forKey: .closedForApplicants)
         fieldInstitutionEvidence = try values.decodeIfPresent(FieldInstitutionClassification.self, forKey: .fieldInstitutionEvidence)
         id = try values.decode(String.self, forKey: .id)
         name = try values.decode(String.self, forKey: .name)
