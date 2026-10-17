@@ -91,6 +91,11 @@ struct VacancyCollectionService: Sendable {
         areas: AreaDirectoryIndex,
         progress: @escaping Progress
     ) async throws -> VacancyCollectionResult {
+        let knownIDs = Set(employers.map(\.id))
+        let additionalIDs = Set(FieldInstitutionClassifier.registry.filter { !$0.source.isEmpty }.flatMap(\.employerIDs)).subtracting(knownIDs)
+        let employers = employers + additionalIDs.sorted().map {
+            EmployerConfigurationEntry(id: $0, name: "Полевое учреждение", comment: "Подтверждено справочником полевых учреждений")
+        }
         let run = CollectionRunClient(client: client, maximumRequests: maximumRequests,
                                       maximumDuration: maximumDuration, uptime: uptime)
         do {
@@ -122,7 +127,8 @@ struct VacancyCollectionService: Sendable {
         var firstError: Error?
         for employer in employers {
             try Task.checkCancellation()
-            let request = HHVacancySearchRequest(employerID: employer.id)
+            let independentFieldAccount = FieldInstitutionClassifier.registry.contains { $0.employerIDs.contains(employer.id) }
+            let request = HHVacancySearchRequest(employerID: employer.id, areaID: independentFieldAccount ? "" : "113")
             let initialResponse: HHVacancySearchResponse
             do {
                 initialResponse = try await probe(for: request)
@@ -145,6 +151,36 @@ struct VacancyCollectionService: Sendable {
                                     actual: outcome.values.count, failures: outcome.failures))
             }
             await run.recordFinishedEmployer(employer.id, issues: issues)
+        }
+        // At most two extra pages per refresh, worldwide, using the same pacing/retry budget.
+        // Search hits are candidates only; never trust text search as classification evidence.
+        if employers.contains(where: { $0.id == "47858" }) {
+            do {
+                for page in 0..<2 {
+                    let response = try await client.searchVacancies(.init(
+                        employerID: "47858", text: "полевое учреждение", areaID: "", page: page
+                    ))
+                    for item in response.items where FieldInstitutionClassifier.classify(summary: item).isMember {
+                        if all[item.id] == nil { all[item.id] = item }
+                    }
+                    if response.pages <= page + 1 { break }
+                    if page == 1 {
+                        issues.append(.init(employerID: "47858", employerName: "Полевые учреждения", expected: nil,
+                                            actual: 0, failures: ["Дополнительный поиск ограничен 200 кандидатами."]))
+                    }
+                }
+            } catch {
+                // The base traversal is already finished. A supplementary access restriction
+                // must still be reported, rather than returning a falsely complete base run.
+                if let apiError = error as? HHAPIError {
+                    switch apiError {
+                    case .rateLimited, .forbidden, .captchaRequired: break
+                    default: if Self.isTerminal(error) { throw error }
+                    }
+                } else if Self.isTerminal(error) { throw error }
+                issues.append(.init(employerID: "47858", employerName: "Полевые учреждения", expected: nil,
+                                    actual: 0, failures: [error.localizedDescription]))
+            }
         }
         // Nothing read and a request failed (for example, the network is down): report the
         // error so the previous complete result stays on screen.
@@ -441,7 +477,7 @@ private actor CollectionRunClient: HHVacancyAPIClient {
         let response = try await client.searchVacancies(request)
         try Task.checkCancellation()
         if expected[request.employerID] == nil { expected[request.employerID] = response.found }
-        for item in response.items {
+        for item in response.items where request.text == nil || FieldInstitutionClassifier.classify(summary: item).isMember {
             values[item.id] = item
             employerValues[request.employerID, default: []].insert(item.id)
         }

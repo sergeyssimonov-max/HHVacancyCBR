@@ -54,7 +54,7 @@ final class HHVacancyCBRUITests: XCTestCase {
         let emptyButton = app.buttons["emptyRefreshVacanciesButton"]
         XCTAssertTrue(toolbarButton.waitForExistence(timeout: 5))
         XCTAssertTrue(emptyButton.exists)
-        XCTAssertEqual(emptyButton.label, "Обновить выборку")
+        XCTAssertEqual(emptyButton.label, "Обновить")
         XCTAssertEqual(emptyButton.frame.width, toolbarButton.frame.width, accuracy: 2)
         XCTAssertEqual(emptyButton.frame.height, toolbarButton.frame.height, accuracy: 2)
     }
@@ -62,20 +62,24 @@ final class HHVacancyCBRUITests: XCTestCase {
     func testToolbarUsesOneAlignedRowWithoutExternalFilterLabels() {
         let app = launch()
         let mode = app.descendants(matching: .any)["vacancyListModePicker"]
+        let category = app.descendants(matching: .any)["categoryFilterPicker"]
         let employer = app.descendants(matching: .any)["employerFilterPicker"]
         let region = app.descendants(matching: .any)["regionFilterPicker"]
         let refresh = app.buttons["searchVacanciesButton"]
 
         XCTAssertTrue(mode.waitForExistence(timeout: 5))
+        XCTAssertTrue(category.exists)
         XCTAssertTrue(employer.exists)
         XCTAssertTrue(region.exists)
         XCTAssertTrue(refresh.exists)
         XCTAssertFalse(app.staticTexts["Работодатель"].exists)
         XCTAssertFalse(app.staticTexts["Субъект"].exists)
-        XCTAssertEqual(mode.frame.midY, employer.frame.midY, accuracy: 6)
+        XCTAssertEqual(mode.frame.midY, category.frame.midY, accuracy: 6)
+        XCTAssertEqual(category.frame.midY, employer.frame.midY, accuracy: 6)
         XCTAssertEqual(employer.frame.midY, region.frame.midY, accuracy: 6)
         XCTAssertEqual(region.frame.midY, refresh.frame.midY, accuracy: 6)
-        XCTAssertLessThan(mode.frame.maxX, employer.frame.minX)
+        XCTAssertLessThan(mode.frame.maxX, category.frame.minX)
+        XCTAssertLessThan(category.frame.maxX, employer.frame.minX)
         XCTAssertLessThan(employer.frame.maxX, region.frame.minX)
         XCTAssertLessThan(region.frame.maxX, refresh.frame.minX)
 
@@ -83,7 +87,7 @@ final class HHVacancyCBRUITests: XCTestCase {
         let status = app.descendants(matching: .any)["vacancyUpdateStatus"]
         XCTAssertTrue(status.waitForExistence(timeout: 8))
         XCTAssertLessThan(status.frame.maxX, refresh.frame.minX)
-        XCTAssertEqual(status.frame.midY, refresh.frame.midY, accuracy: 6)
+        XCTAssertGreaterThan(status.frame.minY, refresh.frame.maxY)
     }
 
     func testEmployerDropdownListsOptionsAndFiltersResults() {

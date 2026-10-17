@@ -36,6 +36,7 @@ enum HHAPIError: LocalizedError, Equatable {
 
 struct HHVacancySearchRequest: Equatable, Sendable {
     let employerID: String
+    let text: String?
     let areaID: String
     let page: Int
     let perPage: Int
@@ -47,6 +48,7 @@ struct HHVacancySearchRequest: Equatable, Sendable {
 
     init(
         employerID: String,
+        text: String? = nil,
         areaID: String = "113",
         page: Int = 0,
         perPage: Int = 100,
@@ -56,6 +58,7 @@ struct HHVacancySearchRequest: Equatable, Sendable {
         workFormat: String? = nil,
         schedule: String? = nil
     ) {
+        self.text = text
         self.employerID = employerID
         self.areaID = areaID
         self.page = page
@@ -121,10 +124,12 @@ struct HHAPIClient: HHVacancyAPIClient, Sendable {
         }
         var items = [
             URLQueryItem(name: "employer_id", value: search.employerID),
-            URLQueryItem(name: "area", value: search.areaID),
             URLQueryItem(name: "page", value: String(search.page)),
             URLQueryItem(name: "per_page", value: String(search.perPage))
         ]
+        if !search.areaID.isEmpty { items.append(.init(name: "area", value: search.areaID)) }
+        if let text = search.text { items.append(.init(name: "text", value: text)) }
+        items.append(.init(name: "order_by", value: "publication_time"))
         let formatter = ISO8601DateFormatter()
         if let value = search.dateFrom { items.append(.init(name: "date_from", value: formatter.string(from: value))) }
         if let value = search.dateTo { items.append(.init(name: "date_to", value: formatter.string(from: value))) }

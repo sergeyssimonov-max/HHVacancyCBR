@@ -9,8 +9,7 @@ enum VacancySearchViews {
         private enum ToolbarMetrics {
             static let controlHeight: CGFloat = 32
             static let modeWidth: CGFloat = 220
-            static let statusWidth: CGFloat = 140
-            static let refreshWidth: CGFloat = 160
+            static let refreshWidth: CGFloat = 120
         }
 
         var body: some View {
@@ -32,7 +31,7 @@ enum VacancySearchViews {
         }
 
         private var toolbar: some View {
-            HStack(spacing: 12) {
+            HStack(spacing: 8) {
                 Picker("", selection: $viewModel.displayMode) {
                     Text("Вакансии").tag(VacancyListMode.all)
                     Text(viewModel.favorites.isEmpty ? "Избранное" : "Избранное · \(viewModel.favorites.count)").tag(VacancyListMode.favorites)
@@ -41,11 +40,19 @@ enum VacancySearchViews {
                 .frame(width: ToolbarMetrics.modeWidth, height: ToolbarMetrics.controlHeight)
                 .accessibilityIdentifier("vacancyListModePicker")
 
+                Picker("Категория", selection: $viewModel.fieldInstitutionsOnly) {
+                    Text("Все вакансии").tag(false)
+                    Text("Полевые учреждения").tag(true)
+                }
+                .labelsHidden()
+                .frame(width: 190, height: ToolbarMetrics.controlHeight)
+                .accessibilityIdentifier("categoryFilterPicker")
+
                 Picker("Работодатель", selection: $viewModel.selectedEmployerID) {
                     ForEach(viewModel.employerFilterOptions) { Text($0.title).tag($0.id) }
                 }
                 .labelsHidden()
-                .frame(minWidth: 150, maxWidth: .infinity)
+                .frame(minWidth: 140, maxWidth: .infinity)
                 .frame(height: ToolbarMetrics.controlHeight)
                 .accessibilityIdentifier("employerFilterPicker")
 
@@ -53,17 +60,9 @@ enum VacancySearchViews {
                     ForEach(viewModel.regionFilterOptions) { Text($0.title).tag($0.id) }
                 }
                 .labelsHidden()
-                .frame(minWidth: 150, maxWidth: .infinity)
+                .frame(minWidth: 140, maxWidth: .infinity)
                 .frame(height: ToolbarMetrics.controlHeight)
                 .accessibilityIdentifier("regionFilterPicker")
-
-                Text(viewModel.updatedAtMessage ?? " ")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-                    .frame(width: ToolbarMetrics.statusWidth, height: ToolbarMetrics.controlHeight, alignment: .trailing)
-                    .accessibilityHidden(viewModel.updatedAtMessage == nil)
-                    .accessibilityIdentifier("vacancyUpdateStatus")
 
                 Button {
                     if viewModel.isLoading { viewModel.cancelSearch() } else { refresh() }
@@ -74,7 +73,7 @@ enum VacancySearchViews {
                 .buttonStyle(.borderedProminent)
                 .frame(width: ToolbarMetrics.refreshWidth, height: ToolbarMetrics.controlHeight)
                 .disabled(viewModel.isLoading ? !viewModel.canCancelSearch : !viewModel.canSearch)
-                .help(viewModel.isLoading ? "Остановить загрузку; сохранится предыдущая полная выборка" : "")
+                .help(viewModel.isLoading ? "Остановить загрузку; сохранится предыдущая полная выборка" : "Обновить выборку вакансий")
                 .accessibilityIdentifier("searchVacanciesButton")
             }
             .controlSize(.large)
@@ -85,8 +84,8 @@ enum VacancySearchViews {
         }
 
         private var refreshButtonTitle: String {
-            guard viewModel.isLoading else { return "Обновить выборку" }
-            return viewModel.isCancellingSearch ? "Отмена…" : "Отменить загрузку"
+            guard viewModel.isLoading else { return "Обновить" }
+            return viewModel.isCancellingSearch ? "Отмена…" : "Отменить"
         }
 
         private var favoritesExportTitle: String {
@@ -103,7 +102,7 @@ enum VacancySearchViews {
             } else if viewModel.hasSearched && viewModel.displayedResults.isEmpty {
                 empty(title: "Вакансий не найдено", message: "Для выбранных работодателей и фильтров вакансий сейчас нет.", action: "Обновить")
             } else if !viewModel.hasSearched && viewModel.displayedResults.isEmpty {
-                empty(title: "ЦБВакансии", message: "Загрузите открытые вакансии настроенных работодателей периметра Банка России по всей России.", action: "Обновить выборку")
+                empty(title: "ЦБВакансии", message: "Загрузите открытые вакансии настроенных работодателей периметра Банка России по всей России.", action: "Обновить")
             } else {
                 results
             }
@@ -111,10 +110,21 @@ enum VacancySearchViews {
 
         private var statusBar: some View {
             HStack(spacing: 12) {
-                Text(viewModel.displayedVacancyCountMessage)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 12) {
+                        Text(viewModel.displayedVacancyCountMessage)
+                            .accessibilityIdentifier("displayedVacancyCount")
+                        Text("Полевые учреждения: \(viewModel.displayedResults.filter(\.isFieldInstitution).count)")
+                    }
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
-                    .accessibilityIdentifier("displayedVacancyCount")
+                    if let updatedAt = viewModel.updatedAtMessage {
+                        Text(updatedAt)
+                            .font(.caption)
+                            .lineLimit(1)
+                            .accessibilityIdentifier("vacancyUpdateStatus")
+                    }
+                }
                 Spacer()
                 if viewModel.isShowingFavorites {
                     if let progress = viewModel.favoritesPDFExportProgress {
@@ -240,6 +250,11 @@ private struct VacancyCard: View {
                             .font(.system(size: 15, weight: .semibold))
                             .accessibilityIdentifier("vacancyTitle.\(result.id)")
                         if result.isArchived { Label("В архиве", systemImage: "archivebox").font(.caption) }
+                    }
+                    if result.isFieldInstitution {
+                        Text("Полевое учреждение").font(.caption).foregroundColor(.secondary)
+                            .help(result.fieldInstitution.reason ?? "")
+                            .accessibilityIdentifier("fieldInstitutionBadge.\(result.id)")
                     }
                     if result.field != .general {
                         Text(result.field == .informationSecurity ? "ИБ" : "IT · Данные · ИИ")

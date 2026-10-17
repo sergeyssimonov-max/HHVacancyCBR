@@ -2,6 +2,7 @@ import Foundation
 
 struct FavoriteVacancyRecord: Codable, Equatable, Identifiable, Sendable {
     let id: String
+    var fieldInstitutionEvidence: FieldInstitutionClassification?
     var name: String
     var employerID: String?
     var employerName: String
@@ -19,6 +20,7 @@ struct FavoriteVacancyRecord: Codable, Equatable, Identifiable, Sendable {
     var updatedAt: Date
 
     init(result: VacancySearchResult, favoritedAt: Date, updatedAt: Date, archiveCheckedAt: Date? = nil) {
+        fieldInstitutionEvidence = result.fieldInstitution
         id = result.id
         name = result.name
         employerID = result.employerID
@@ -40,6 +42,7 @@ struct FavoriteVacancyRecord: Codable, Equatable, Identifiable, Sendable {
     @discardableResult
     mutating func update(from result: VacancySearchResult, at date: Date) -> Bool {
         let previous = self
+        if result.isFieldInstitution { fieldInstitutionEvidence = result.fieldInstitution }
         name = result.name.nilIfBlank ?? name
         employerID = result.employerID ?? employerID
         employerName = result.employerName.nilIfBlank ?? employerName
@@ -64,7 +67,7 @@ struct FavoriteVacancyRecord: Codable, Equatable, Identifiable, Sendable {
     }
 
     var searchResult: VacancySearchResult {
-        let summary = HHVacancySummary(
+        var summary = HHVacancySummary(
             id: id,
             name: name,
             employer: HHEmployer(name: employerName, id: employerID),
@@ -76,6 +79,7 @@ struct FavoriteVacancyRecord: Codable, Equatable, Identifiable, Sendable {
             department: departmentName.map { HHNamedItem(name: $0) },
             publishedAt: publishedAt
         )
+        summary.fieldInstitutionEvidence = fieldInstitutionEvidence
         let details = detailsSnapshot ?? HHVacancyDetails(
             id: id,
             name: name,
@@ -100,12 +104,14 @@ struct FavoriteVacancyRecord: Codable, Equatable, Identifiable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
+        case fieldInstitutionEvidence
         case id, name, employerID, employerName, departmentName, publishedAt, location, salaryText, alternateURL
         case snippet, descriptionHTML, detailsSnapshot, isArchived, archiveCheckedAt, favoritedAt, updatedAt
     }
 
     func encode(to encoder: Encoder) throws {
         var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encodeIfPresent(fieldInstitutionEvidence, forKey: .fieldInstitutionEvidence)
         try values.encode(id, forKey: .id)
         try values.encode(name, forKey: .name)
         try values.encodeIfPresent(employerID, forKey: .employerID)
@@ -126,6 +132,7 @@ struct FavoriteVacancyRecord: Codable, Equatable, Identifiable, Sendable {
 
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
+        fieldInstitutionEvidence = try values.decodeIfPresent(FieldInstitutionClassification.self, forKey: .fieldInstitutionEvidence)
         id = try values.decode(String.self, forKey: .id)
         name = try values.decode(String.self, forKey: .name)
         employerID = try values.decodeIfPresent(String.self, forKey: .employerID)

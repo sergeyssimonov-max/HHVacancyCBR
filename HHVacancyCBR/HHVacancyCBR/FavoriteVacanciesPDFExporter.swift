@@ -232,6 +232,7 @@ enum VacancyPDFFormatter {
 
         builder.section("Основная информация")
         builder.field("Работодатель", vacancy.employerName)
+        if vacancy.isFieldInstitution { builder.field("Категория", "Полевое учреждение") }
         if let department = vacancy.departmentName {
             builder.field("Подразделение", department)
         }
@@ -476,6 +477,7 @@ struct VacancyStatisticsReport: Sendable {
         let regionID: String
         let regionName: String
         let isArchived: Bool
+        let isFieldInstitution: Bool
         let hasSalary: Bool
 
         init(_ vacancy: VacancySearchResult) {
@@ -487,6 +489,7 @@ struct VacancyStatisticsReport: Sendable {
             regionID = vacancy.location.filterID
             regionName = vacancy.location.subjectName ?? vacancy.areaName
             isArchived = vacancy.isArchived
+            isFieldInstitution = vacancy.isFieldInstitution
             hasSalary = vacancy.salaryText?.nilIfBlank != nil
         }
     }
@@ -540,6 +543,7 @@ struct VacancyStatisticsReport: Sendable {
         builder.plain(sourceNote)
         builder.section("Общая статистика")
         builder.field("Всего вакансий", String(entries.count))
+        builder.field("Полевые учреждения", String(entries.filter(\.isFieldInstitution).count))
         builder.field("Работодателей", String(employers.count))
         builder.field("Регионов / территориальных групп", String(regions.count))
         builder.field("Активных по локальным данным", String(entries.count - archived))

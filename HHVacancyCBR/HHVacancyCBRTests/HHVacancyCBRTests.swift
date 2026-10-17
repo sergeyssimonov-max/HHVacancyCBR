@@ -6,6 +6,134 @@ import SwiftUI
 @testable import HHVacancyCBR
 
 final class HHVacancyCBRTests: XCTestCase {
+    private func fieldSummary(_ title: String, id: String = "field", employer: String = "47858", description: String? = nil,
+                              area: HHArea = .init(id: "1", name: "Москва")) -> HHVacancySummary {
+        .init(id: id, name: title, employer: .init(name: "Банк России", id: employer), salary: nil,
+              area: area, alternateURL: nil, url: nil, snippet: .init(requirement: description, responsibility: nil),
+              publishedAt: "2026-10-17T10:00:00+0300")
+    }
+
+    func testFieldInstitutionPositiveAndNegativeEvidence() {
+        for title in ["Кассир полевого учреждения Банка России", "Инженер (ПУ Инское)",
+                      "Кассир ПУ № 10513", "Полевое учреждение Центрального банка № 99999"] {
+            let result = FieldInstitutionClassifier.classify(summary: fieldSummary(title))
+            XCTAssertTrue(result.isMember, title)
+            XCTAssertNotNil(result.reason)
+        }
+        for title in ["Полевой инженер", "Работа в полевых условиях", "Кассир, Инское", "Кассир, Заводское",
+                      "Специалист Департамента полевых учреждений", "Разработчик для полевых учреждений Банка России",
+                      "Документ № 10513", "Кассир ПУ Инское-2"] {
+            XCTAssertFalse(FieldInstitutionClassifier.classify(summary: fieldSummary(title)).isMember, title)
+        }
+        XCTAssertFalse(FieldInstitutionClassifier.classify(summary: fieldSummary("Полевое учреждение Банка России", employer: "999")).isMember)
+        XCTAssertFalse(FieldInstitutionClassifier.classify(summary: fieldSummary("Кассир", description: "Взаимодействие с полевыми учреждениями Банка России")).isMember)
+        XCTAssertFalse(FieldInstitutionClassifier.classify(summary: fieldSummary("Кассир", description: "Опыт работы в полевом учреждении Банка России")).isMember)
+        XCTAssertTrue(FieldInstitutionClassifier.classify(summary: fieldSummary("Кассир", description: "Место работы: в полевом учреждении Банка России Инское")).isMember)
+        XCTAssertTrue(FieldInstitutionClassifier.classify(summary: fieldSummary("Кассир", description: "Работа в ПУ Инское")).isMember)
+    }
+
+    func testFieldInstitutionVerifiedAccountRequiresDocumentedRegistryEntry() {
+        let summary = fieldSummary("Водитель", employer: "123")
+        XCTAssertTrue(FieldInstitutionClassifier.classify(summary: summary, registry: [
+            .init(aliases: ["Тестовое"], employerIDs: ["123"], source: "https://example.org/test-evidence")
+        ]).isMember)
+        XCTAssertFalse(FieldInstitutionClassifier.classify(summary: summary, registry: [
+            .init(aliases: ["Тестовое"], employerIDs: ["123"], source: "")
+        ]).isMember)
+    }
+
+    func testFieldInstitutionLazyDetailsAndPersistence() throws {
+        let summary = fieldSummary("Системный администратор")
+        XCTAssertFalse(VacancySearchResult(summary: summary, location: .unknown).isFieldInstitution)
+        let result = VacancySearchResult(id: summary.id, summary: summary,
+            details: .init(id: summary.id, name: summary.name, employer: summary.employer, area: summary.area,
+                           salary: nil, alternateURL: nil, description: "Работа в полевом учреждении Банка России Инское"),
+            isDetailLoaded: true)
+        XCTAssertTrue(result.isFieldInstitution)
+        XCTAssertTrue(result.isTechnologyRelated)
+        let favorite = FavoriteVacancyRecord(result: result, favoritedAt: Date(), updatedAt: Date())
+        let restored = try JSONDecoder().decode(FavoriteVacancyRecord.self, from: JSONEncoder().encode(favorite))
+        XCTAssertEqual(restored.searchResult.fieldInstitution, result.fieldInstitution)
+        let snapshot = VacancySnapshot(values: [result], issues: [], updatedAt: Date())
+        let restoredSnapshot = try JSONDecoder().decode(VacancySnapshot.self, from: JSONEncoder().encode(snapshot))
+        XCTAssertEqual(restoredSnapshot.results.first?.fieldInstitution, result.fieldInstitution)
+    }
+
+    @MainActor
+    func testFieldInstitutionCategoryANDRegionFavoritesAndPDF() async throws {
+        let rows = [fieldSummary("Кассир ПУ Инское"), fieldSummary("Кассир", id: "ordinary"),
+                    fieldSummary("Кассир ПУ № 10513", id: "foreign", area: .init(id: "foreign", name: "Кант"))]
+        let index = try AreaDirectoryIndex(root: .init(id: "113", name: "Россия", areas: [.init(id: "1", name: "Москва")]))
+        let values = rows.map { VacancySearchResult(summary: $0, location: index.location(for: $0)) }
+        XCTAssertEqual(values.last?.location.subjectName, "Кант")
+        let store = VacancySnapshotStore(fileURL: temporaryDirectory().appendingPathComponent("snapshot.json"))
+        try store.save(.init(values: values, issues: [], updatedAt: Date()))
+        let model = VacancySearchViewModel(apiClient: MockAPIClient(mode: .simple),
+            employerStore: TestEmployerStore(entries: [.init(id: "47858", name: "Банк России", comment: "test")]),
+            snapshotStore: store)
+        await model.loadPersistenceIfNeeded()
+        model.fieldInstitutionsOnly = true
+        XCTAssertEqual(Set(model.displayedResults.map(\.id)), ["field", "foreign"])
+        model.selectedRegionID = "subject:1"
+        model.selectedEmployerID = "47858"
+        XCTAssertEqual(model.displayedResults.map(\.id), ["field"])
+        model.toggleFavorite(id: "field")
+        model.displayMode = .favorites
+        XCTAssertEqual(model.displayedResults.map(\.id), ["field"])
+        let report = model.statisticsReportSnapshot()
+        XCTAssertTrue(report.sourceNote.contains("Полевые учреждения"))
+        let document = try report.attributedDocument()
+        XCTAssertTrue(document.string.contains("Полевые учреждения: 1"))
+        let pdf = try XCTUnwrap(PDFDocument(data: FavoriteVacanciesPDFExporter.pdfData(for: FavoriteVacanciesPDFExporter.pages(for: document))))
+        XCTAssertTrue(try extractedStatisticsText(pdf).contains("Полевые учреждения"))
+        model.selectedEmployerID = "999"
+        XCTAssertTrue(model.displayedResults.isEmpty)
+    }
+
+    func testFieldInstitutionAdditionalSearchBoundedDeduplicatedAndVerified() async throws {
+        let matching = fieldSummary("Кассир ПУ Инское")
+        let unrelated = fieldSummary("Полевой инженер", id: "unrelated")
+        let foreign = fieldSummary("Кассир ПУ № 10513", id: "foreign", area: .init(id: "foreign", name: "Кант"))
+        let client = FieldSearchClient(rows: [matching, unrelated, foreign])
+        let result = try await VacancyCollectionService(client: client).collect(
+            employers: [.init(id: "47858", name: "Банк России", comment: "test")],
+            areas: AreaDirectoryIndex(root: .init(id: "113", name: "Россия")), progress: { _ in })
+        XCTAssertEqual(Set(result.vacancies.map(\.id)), ["field", "foreign"])
+        XCTAssertEqual(result.vacancies.count, 2)
+        XCTAssertFalse(result.isComplete, "A capped supplemental search must disclose the limit")
+        let requests = await client.requests
+        XCTAssertEqual(requests.count, 3)
+        XCTAssertEqual(requests.filter { $0.text != nil }.map(\.page), [0, 1])
+        XCTAssertTrue(requests.filter { $0.text != nil }.allSatisfy { $0.areaID.isEmpty })
+    }
+
+    func testFieldInstitutionSupplementalRestrictionIsReported() async throws {
+        let client = FieldSearchClient(rows: [fieldSummary("Кассир")], restrictSupplement: true)
+        let result = try await VacancyCollectionService(client: client).collect(
+            employers: [.init(id: "47858", name: "Банк России", comment: "test")],
+            areas: AreaDirectoryIndex(root: .init(id: "113", name: "Россия")), progress: { _ in })
+        XCTAssertEqual(result.vacancies.count, 1)
+        XCTAssertFalse(result.isComplete)
+        XCTAssertEqual(result.issues.first?.employerName, "Полевые учреждения")
+    }
+
+    @MainActor
+    func testFieldInstitutionLazyEnrichmentUpdatesFilterFavoriteAndDisk() async throws {
+        let summary = fieldSummary("Кассир")
+        let store = VacancySnapshotStore(fileURL: temporaryDirectory().appendingPathComponent("snapshot.json"))
+        try store.save(.init(values: [.init(summary: summary, location: .unknown)], issues: [], updatedAt: Date()))
+        let model = VacancySearchViewModel(apiClient: FieldSearchClient(rows: [summary]),
+            employerStore: TestEmployerStore(entries: [.init(id: "47858", name: "Банк России", comment: "test")]), snapshotStore: store)
+        await model.loadPersistenceIfNeeded()
+        model.toggleFavorite(id: summary.id)
+        XCTAssertFalse(model.results[0].isFieldInstitution)
+        await model.loadVacancyDetails(id: summary.id)
+        model.fieldInstitutionsOnly = true
+        XCTAssertEqual(model.displayedResults.map(\.id), [summary.id])
+        XCTAssertTrue(try XCTUnwrap(store.load()).results[0].isFieldInstitution)
+        XCTAssertTrue(model.favorites[0].searchResult.isFieldInstitution)
+    }
+
     override func tearDown() {
         URLProtocolStub.handler = nil
         super.tearDown()
@@ -449,7 +577,7 @@ final class HHVacancyCBRTests: XCTestCase {
                        .subject(id: "66", name: "Свердловская область", cityID: "3", cityName: "Екатеринбург"))
         XCTAssertEqual(index.location(for: summary(id: "r", areaID: nil, areaName: nil,
                                                    workFormat: [.init(id: "REMOTE", name: "Удалённо")])), .remote)
-        XCTAssertEqual(index.location(for: summary(id: "foreign", areaID: "999", areaName: "Минск")), .unknown)
+        XCTAssertEqual(index.location(for: summary(id: "foreign", areaID: "999", areaName: "Минск")), .subject(id: "999", name: "Минск", cityID: "999", cityName: "Минск"))
         let multiple = summary(id: "multi", areaID: "1", areaName: "Москва", areas: [
             .init(id: "1", name: "Москва"), .init(id: "2", name: "Санкт-Петербург")
         ])
@@ -517,7 +645,7 @@ final class HHVacancyCBRTests: XCTestCase {
         XCTAssertEqual(result.vacancies.map(\.id), ["only-one"])
         XCTAssertEqual(result.issues, [.init(employerID: "47858", employerName: "Банк России", expected: 2, actual: 1, failures: [])])
         XCTAssertEqual(result.issues.first?.message, "Банк России – ожидалось 2, получено 1")
-        XCTAssertEqual(requestCount, 2)
+        XCTAssertEqual(requestCount, 3)
     }
 
     func testCollectorKeepsOtherEmployersWhenOneEmployerFails() async throws {
@@ -803,7 +931,7 @@ final class HHVacancyCBRTests: XCTestCase {
         let requestCount = await client.searchRequestCount
         XCTAssertEqual(values.vacancies.count, 1)
         XCTAssertTrue(values.isComplete)
-        XCTAssertEqual(requestCount, 1)
+        XCTAssertEqual(requestCount, 2)
     }
 
     func testCollectorSearchRequestCountForPartitionedResult() async throws {
@@ -819,7 +947,7 @@ final class HHVacancyCBRTests: XCTestCase {
         let requestCount = await client.searchRequestCount
         XCTAssertEqual(values.vacancies.count, 2_001)
         XCTAssertTrue(values.isComplete)
-        XCTAssertEqual(requestCount, 22)
+        XCTAssertEqual(requestCount, 23)
     }
 
     func testAreaDirectoryUsesFreshThenExplicitStaleCacheAndRejectsCorruptionWithoutNetwork() async throws {
@@ -4032,6 +4160,7 @@ private actor MockAPIClient: HHVacancyAPIClient {
     }
     func searchVacancies(_ request: HHVacancySearchRequest) async throws -> HHVacancySearchResponse {
         searchRequestCount += 1
+        if request.text != nil { return .init(items: [], found: 0, pages: 0, page: request.page, perPage: request.perPage) }
         try await beforeSearchResponse?()
         if case .delayedRefreshFailure = mode, shouldFailSearch {
             try await Task.sleep(nanoseconds: 100_000_000)
@@ -4045,7 +4174,7 @@ private actor MockAPIClient: HHVacancyAPIClient {
                 values = [
                     makeSummary(id: "filter-moscow", employerID: "47858", employerName: "Банк России", areaID: "1", areaName: "Москва"),
                     makeSummary(id: "filter-ekb", employerID: "47858", employerName: "Банк России", areaID: "3", areaName: "Екатеринбург"),
-                    makeSummary(id: "filter-unknown", employerID: "47858", employerName: "Банк России", areaID: "999", areaName: "Минск")
+                    makeSummary(id: "filter-unknown", employerID: "47858", employerName: "Банк России", areaID: "", areaName: "")
                 ]
             case "1654251":
                 values = [makeSummary(id: "filter-remote", employerID: "1654251", employerName: "НСПК", remote: true)]
@@ -4440,4 +4569,25 @@ private final class TestSupportFileManager: FileManager, @unchecked Sendable {
         XCTFail("Persistent data must never fall back to TMPDIR")
         return super.temporaryDirectory
     }
+}
+
+private actor FieldSearchClient: HHVacancyAPIClient {
+    let rows: [HHVacancySummary]
+    var requests: [HHVacancySearchRequest] = []
+    let restrictSupplement: Bool
+    init(rows: [HHVacancySummary], restrictSupplement: Bool = false) { self.rows = rows; self.restrictSupplement = restrictSupplement }
+    nonisolated func validateVacanciesAccess() throws {}
+    func searchVacancies(_ request: HHVacancySearchRequest) async throws -> HHVacancySearchResponse {
+        requests.append(request)
+        if restrictSupplement, request.text != nil { throw HHAPIError.rateLimited(retryAfterSeconds: 60) }
+        return .init(items: request.text == nil ? [rows[0]] : rows, found: request.text == nil ? 1 : 500,
+                     pages: request.text == nil ? 1 : 5, page: request.page, perPage: request.perPage)
+    }
+    func vacancyDetails(id: String) async throws -> HHVacancyDetails {
+        let row = rows[0]
+        return .init(id: id, name: row.name, employer: row.employer, area: row.area, salary: nil,
+                     alternateURL: nil, description: "Место работы: полевое учреждение Банка России Инское")
+    }
+    func areaTree() async throws -> HHAreaNode { .init(id: "113", name: "Россия") }
+    func vacancyDictionaries() async throws -> HHVacancyDictionaries { .init(experience: [], workFormat: [], schedule: []) }
 }

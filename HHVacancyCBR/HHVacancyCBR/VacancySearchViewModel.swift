@@ -53,6 +53,7 @@ final class VacancySearchViewModel: ObservableObject {
             reconcileExpanded()
         }
     }
+    @Published var fieldInstitutionsOnly = false { didSet { reconcileExpanded() } }
     @Published var selectedEmployerID = "all" { didSet { reconcileExpanded() } }
     @Published var selectedRegionID = "all" { didSet { reconcileExpanded() } }
 
@@ -196,7 +197,7 @@ final class VacancySearchViewModel: ObservableObject {
     }
 
     var displayedResults: [VacancySearchResult] {
-        let values = unfilteredResults
+        let values = unfilteredResults.filter { !fieldInstitutionsOnly || $0.isFieldInstitution }
         let filtered: [VacancySearchResult]
         switch (selectedEmployerID == "all", selectedRegionID == "all") {
         case (true, true):
@@ -328,8 +329,12 @@ final class VacancySearchViewModel: ObservableObject {
                 self?.statusMessage = "\(progress.employerName): загружено \(progress.loadedCount), \(progress.partition)."
             }
             try Task.checkCancellation()
+            let priorEvidence = Dictionary(uniqueKeysWithValues: results.map { ($0.id, $0.fieldInstitution) })
+            let favoriteEvidence = Dictionary(uniqueKeysWithValues: favorites.map { ($0.id, $0.fieldInstitutionEvidence) })
             let values = orderedNewestFirst(collection.vacancies.map { summary -> VacancySearchResult in
-                VacancySearchResult(summary: summary, location: areaSnapshot.index.location(for: summary))
+                var summary = summary
+                summary.fieldInstitutionEvidence = priorEvidence[summary.id] ?? favoriteEvidence[summary.id] ?? nil
+                return VacancySearchResult(summary: summary, location: areaSnapshot.index.location(for: summary))
             })
             if !collection.isComplete, let cache, cache.issues.isEmpty {
                 collectionWarning = Self.makeCollectionWarning(for: collection.issues)?
@@ -515,6 +520,12 @@ final class VacancySearchViewModel: ObservableObject {
             archiveCheckedAt: details.archived == nil ? old.archiveCheckedAt : currentDate()
         )
         results[index] = value
+        if let previous = cache {
+            cache = VacancySearchCache(values: results, updatedAt: previous.updatedAt, issues: previous.issues)
+            do {
+                try snapshotStore?.save(VacancySnapshot(values: results, issues: previous.issues, updatedAt: previous.updatedAt))
+            } catch { snapshotWarning = "Не удалось сохранить уточнённую категорию вакансии." }
+        }
         if let favoriteIndex = favorites.firstIndex(where: { $0.id == value.id }), favorites[favoriteIndex].update(from: value, at: currentDate()) {
             persistFavorites()
         }
@@ -744,7 +755,8 @@ final class VacancySearchViewModel: ObservableObject {
     func statisticsReportSnapshot() -> VacancyStatisticsReport {
         let employer = employerFilterOptions.first { $0.id == selectedEmployerID }?.title ?? selectedEmployerID
         let region = regionFilterOptions.first { $0.id == selectedRegionID }?.title ?? selectedRegionID
-        var note = "Отчёт по локальной выборке на момент нажатия кнопки. Дополнительная проверка HH.ru не выполнялась."
+        var note = "Категория: \(fieldInstitutionsOnly ? "Полевые учреждения" : "Все вакансии"). "
+        note += "Отчёт по локальной выборке на момент нажатия кнопки. Дополнительная проверка HH.ru не выполнялась."
         if let cache {
             note += " Последняя загрузка общего списка: \(cache.updatedAt.formatted(date: .numeric, time: .shortened))."
         }

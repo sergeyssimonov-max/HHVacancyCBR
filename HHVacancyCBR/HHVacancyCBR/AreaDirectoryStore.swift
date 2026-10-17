@@ -45,8 +45,12 @@ struct AreaDirectoryIndex: Sendable {
         } else {
             locations = summary.area.map { [$0] } ?? []
         }
-        guard locations.count == 1, let areaID = locations[0].id, areaID != root.id,
-              let subject = subjectAncestor(for: areaID) else { return .unknown }
+        guard locations.count == 1, let areaID = locations[0].id, areaID != root.id else { return .unknown }
+        guard let subject = subjectAncestor(for: areaID) else {
+            // Preserve HH geography outside the cached Russian tree; do not invent a Russian region.
+            guard let name = locations[0].name, !name.isEmpty else { return .unknown }
+            return .subject(id: areaID, name: name, cityID: areaID, cityName: name)
+        }
         if areaID == subject.id {
             let federalCity = areaID == "1" || areaID == "2"
             return .subject(id: subject.id, name: subject.name, cityID: federalCity ? areaID : nil, cityName: federalCity ? subject.name : nil)
