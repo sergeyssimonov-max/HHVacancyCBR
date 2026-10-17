@@ -119,7 +119,7 @@ g(union uint512_u *h, const union uint512_u *N, const unsigned char *m)
     /* Restore the Floating-point status on the CPU */
     _mm_empty();
 #else
-    union uint512_u Ki, data;
+    union uint512_u Ki, data = {{0}};
     unsigned int i;
 
     XLPS(h, N, (&data));
