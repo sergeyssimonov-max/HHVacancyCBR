@@ -235,7 +235,7 @@ final class HHVacancyCBRUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["vacancyTitle.ui-1"].waitForExistence(timeout: 8))
 
         button.click()
-        XCTAssertTrue(waitForLabel("Отменить загрузку", of: button), "Refresh must turn the button into a cancel command")
+        XCTAssertTrue(waitForLabel("Отменить", of: button), "Refresh must turn the button into a cancel command")
         XCTAssertTrue(button.isEnabled)
         let loading = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
         loading.name = "Refresh in progress with cancel command"
@@ -243,7 +243,7 @@ final class HHVacancyCBRUITests: XCTestCase {
         add(loading)
 
         button.click()
-        XCTAssertTrue(waitForLabel("Обновить выборку", of: button, timeout: 10), "Cancelled refresh must end promptly")
+        XCTAssertTrue(waitForLabel("Обновить", of: button, timeout: 10), "Cancelled refresh must end promptly")
         XCTAssertTrue(app.staticTexts["vacancyTitle.ui-1"].exists, "Previous results stay after cancellation")
         XCTAssertFalse(app.descendants(matching: .any)["collectionWarning"].exists)
     }
@@ -253,14 +253,14 @@ final class HHVacancyCBRUITests: XCTestCase {
         let button = app.buttons["searchVacanciesButton"]
         XCTAssertTrue(button.waitForExistence(timeout: 5))
         button.click()
-        XCTAssertTrue(waitForLabel("Отменить загрузку", of: button))
+        XCTAssertTrue(waitForLabel("Отменить", of: button))
         XCTAssertTrue(app.staticTexts["Загружаем вакансии всех настроенных работодателей…"].exists)
 
         button.click()
-        XCTAssertTrue(waitForLabel("Обновить выборку", of: button, timeout: 10))
+        XCTAssertTrue(waitForLabel("Обновить", of: button, timeout: 10))
         let emptyButton = app.buttons["emptyRefreshVacanciesButton"]
         XCTAssertTrue(emptyButton.waitForExistence(timeout: 5))
-        XCTAssertEqual(emptyButton.label, "Обновить выборку")
+        XCTAssertEqual(emptyButton.label, "Обновить")
         XCTAssertFalse(app.staticTexts["Вакансий не найдено"].exists)
     }
 
