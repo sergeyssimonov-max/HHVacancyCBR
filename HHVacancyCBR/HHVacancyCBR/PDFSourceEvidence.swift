@@ -1,7 +1,7 @@
 import Foundation
 import CryptoKit
 
-/// A digest detects changed bytes; it does not authenticate the sender or time.
+/// A matching digest verifies that the saved response bytes are unchanged.
 enum MaterialHash {
     static let algorithm = "GOST-R-34.11-2012-512"
     static let displayName = "ГОСТ Р 34.11-2012 «Информационная технология. Криптографическая защита информации. Функция хэширования», 512 бит"
@@ -50,17 +50,12 @@ struct APIObservation: Codable, Identifiable, Sendable {
     let method: String
 }
 
-struct DocumentContext: Codable, Sendable {
-    let id: String
-    let createdAt: String
+struct DocumentContext: Sendable {
     let kind: String
     let filters: [String: String]
     let vacancyIDs: [String]
     let observationIDs: [String]
-    init(id: String = UUID().uuidString.lowercased(), kind: String, vacancyIDs: [String], observationIDs: [String] = [], filters: [String: String] = [:],
-         createdAt: Date = Date()) {
-        self.id = id
-        self.createdAt = PDFSourceJSON.timestamp(createdAt)
+    init(kind: String, vacancyIDs: [String], observationIDs: [String] = [], filters: [String: String] = [:]) {
         self.kind = kind
         self.filters = filters; self.vacancyIDs = vacancyIDs
         self.observationIDs = Array(Set(observationIDs)).sorted()
@@ -156,14 +151,14 @@ final class PDFSourceEvidence: @unchecked Sendable {
     }
     func materials(for context: DocumentContext) throws -> [Material] {
         lock.lock(); defer { lock.unlock() }
-        var result = [Material(path: "report.json", data: try PDFSourceJSON.encode(context), type: "report-metadata", observationIDs: context.observationIDs)]
-        for id in context.observationIDs {
+        var result: [Material] = []
+        for (index, id) in context.observationIDs.enumerated() {
             let record = try observation(id)
             guard !Set(record.vacancyIDs).isDisjoint(with: context.vacancyIDs) else { throw PDFSourceError.invalid("Несвязанный материал") }
             let source = try directory("observations").appendingPathComponent(id)
-            for (name, type) in [("response.json", "api-response"), ("observation.json", "observation-metadata")] {
-                result.append(Material(path: "observations/\(id)/" + name, data: try Data(contentsOf: source.appendingPathComponent(name)), type: type, observationIDs: [id]))
-            }
+            result.append(Material(path: String(format: "sources/response-%03d.json", index + 1),
+                                   data: try Data(contentsOf: source.appendingPathComponent("response.json")),
+                                   type: "api-response", observationIDs: [id]))
         }
         return result
     }

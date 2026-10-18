@@ -44,18 +44,21 @@ enum VacancyPDFDefaults {
 /// Fonts/colors are computed to avoid sharing non-Sendable AppKit objects.
 enum VacancyPDFStyle {
     static func font(ofSize size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
-        // Arial has a correct Cyrillic ToUnicode map in CoreGraphics PDFs.
-        let name = weight.rawValue >= NSFont.Weight.medium.rawValue ? "Arial-BoldMT" : "ArialMT"
-        return NSFont(name: name, size: size) ?? NSFont.systemFont(ofSize: size, weight: weight)
+        // Avenir Next ships with supported macOS versions; the fallback remains available
+        // if a user has disabled the document font.
+        let heading = weight.rawValue >= NSFont.Weight.semibold.rawValue
+        let preferred = heading ? "AvenirNext-DemiBold" : "AvenirNext-Regular"
+        let fallback = heading ? "Arial-BoldMT" : "ArialMT"
+        return NSFont(name: preferred, size: size)
+            ?? NSFont(name: fallback, size: size)
+            ?? NSFont.systemFont(ofSize: size, weight: weight)
     }
     static let bodySize: CGFloat = 9.5
     static var bodyFont: NSFont { font(ofSize: bodySize) }
-    static var labelFont: NSFont { font(ofSize: bodySize, weight: .medium) }
+    static var labelFont: NSFont { bodyFont }
     static var headingFont: NSFont { font(ofSize: 11.5, weight: .semibold) }
-    static var titleFont: NSFont { font(ofSize: 18, weight: .semibold) }
+    static var titleFont: NSFont { font(ofSize: 17, weight: .semibold) }
     static var ink: NSColor { .black }
-    static var muted: NSColor { NSColor(calibratedWhite: 0.33, alpha: 1) }
-    static let documentID = NSAttributedString.Key("HHDocumentID")
     static let documentKind = NSAttributedString.Key("HHDocumentKind")
     static let keepWithNext = NSAttributedString.Key("VacancyPDFKeepWithNext")
 
@@ -444,7 +447,6 @@ enum VacancyPDFFormatter {
 }
 
 struct VacancyStatisticsReport: Sendable {
-    var documentID = UUID().uuidString.lowercased()
     var categoryName = "Все вакансии"
     var documentContext: DocumentContext {
         var selectedFilters: [String: String] = [:]
@@ -452,10 +454,9 @@ struct VacancyStatisticsReport: Sendable {
         if regionID != "all" { selectedFilters["Регион"] = regionName }
         if categoryName != "Все вакансии" { selectedFilters["Категория"] = categoryName }
         if modeName != "Все вакансии" { selectedFilters["Список"] = modeName }
-        return DocumentContext(id: documentID, kind: "Реестр вакансий",
+        return DocumentContext(kind: "Реестр вакансий",
                         vacancyIDs: entries.map(\.id), observationIDs: entries.flatMap(\.observationIDs),
-                        filters: selectedFilters,
-                        createdAt: createdAt)
+                        filters: selectedFilters)
     }
     struct Entry: Sendable {
         let id: String
@@ -585,59 +586,66 @@ final class VacancyPDFDocumentBuilder {
     private static var titleFont: NSFont { VacancyPDFStyle.titleFont }
 
     func identify(_ context: DocumentContext) {
-        document.addAttributes([VacancyPDFStyle.documentID: context.id, VacancyPDFStyle.documentKind: context.kind], range: NSRange(location: 0, length: document.length))
+        document.addAttribute(VacancyPDFStyle.documentKind, value: context.kind, range: NSRange(location: 0, length: document.length))
     }
 
     func documentHeader(_ context: DocumentContext) {
         title(context.kind)
-        field("Идентификатор документа", context.id)
-        field("Сформирован", VacancyPDFStyle.utcDate(context.createdAt))
         field("Источник", "HeadHunter (hh.ru)")
-        field("Способ получения", context.observationIDs.isEmpty ? "Сохранённые сведения о вакансии" : "Ответы API hh.ru")
         for key in context.filters.keys.sorted() { field(key, context.filters[key]) }
         if context.vacancyIDs.count > 1 { field("Количество вакансий", String(Set(context.vacancyIDs).count)) }
     }
 
     func identificationNote() {
-        provenance("Идентификатор вакансии — номер объявления на hh.ru; идентификатор работодателя — номер карточки организации на hh.ru. Вместе с датой публикации и ссылкой они помогают найти и отличить исходное объявление. Статус и приём откликов приводятся только по имеющимся сведениям hh.ru.")
+        provenance("Идентификаторы вакансии и работодателя — номера, присвоенные hh.ru. По ним можно найти объявление и карточку организации. Дата публикации, статус и приём откликов приведены по сведениям hh.ru.")
     }
 
     func sourceEvidence(_ context: DocumentContext) {
         let records = context.observationIDs.compactMap { try? PDFSourceEvidence.shared.observation($0) }
         guard !records.isEmpty else { return }
+        let blockStart = document.length
         section("Проверка исходных данных")
         field("Хеш-функция", MaterialHash.displayName)
-        provenance("Хеш позволяет обнаружить изменение сохранённых байтов ответа hh.ru при повторном вычислении. Сам по себе он не подтверждает отправителя ответа или время его получения.")
+        provenance("Хеш рассчитан по исходным байтам ответа hh.ru, приложенного к PDF. Совпадение хеша при повторном расчёте подтверждает неизменность сохранённого ответа.")
         for (index, record) in records.enumerated() {
-            field("Ответ hh.ru №\(index + 1)", record.endpoint + " · получен " + VacancyPDFStyle.utcDate(record.receivedAt))
+            field("Ответ hh.ru №\(index + 1)", record.endpoint + " · сохранён " + VacancyPDFStyle.utcDate(record.receivedAt))
             hashField("Хеш ответа №\(index + 1)", record.hash)
+        }
+        if records.count <= 3 {
+            let text = document.string as NSString
+            let lastParagraph = text.paragraphRange(for: NSRange(location: document.length - 1, length: 0))
+            let groupLength = lastParagraph.location - blockStart
+            if groupLength > 0 {
+                document.addAttribute(VacancyPDFStyle.keepWithNext, value: true,
+                                      range: NSRange(location: blockStart, length: groupLength))
+            }
         }
     }
 
     func title(_ text: String) {
-        let style = paragraphStyle(lineSpacing: 2, paragraphSpacing: 10)
+        let style = paragraphStyle(lineSpacing: 2, paragraphSpacing: 12)
         append(text + "\n", attributes: [.font: Self.titleFont, .foregroundColor: VacancyPDFStyle.ink, .paragraphStyle: style, VacancyPDFStyle.keepWithNext: true])
     }
 
     func provenance(_ text: String) {
         append(text + "\n", attributes: [
-            .font: VacancyPDFStyle.font(ofSize: 8.5),
-            .foregroundColor: VacancyPDFStyle.muted,
-            .paragraphStyle: paragraphStyle(lineSpacing: 2, paragraphSpacing: 10)
+            .font: Self.bodyFont,
+            .foregroundColor: VacancyPDFStyle.ink,
+            .paragraphStyle: paragraphStyle(lineSpacing: 2, paragraphSpacing: 8)
         ])
     }
 
     func notice(_ text: String) {
-        let style = paragraphStyle(lineSpacing: 2, paragraphSpacing: 10)
+        let style = paragraphStyle(lineSpacing: 2, paragraphSpacing: 8)
         append(text + "\n", attributes: [
-            .font: VacancyPDFStyle.font(ofSize: 8.5, weight: .medium),
-            .foregroundColor: NSColor.black,
+            .font: Self.bodyFont,
+            .foregroundColor: VacancyPDFStyle.ink,
             .paragraphStyle: style
         ])
     }
 
     func section(_ text: String) {
-        let style = paragraphStyle(lineSpacing: 1, paragraphSpacing: 6, paragraphSpacingBefore: 14)
+        let style = paragraphStyle(lineSpacing: 2, paragraphSpacing: 8, paragraphSpacingBefore: 14)
         append(text + "\n", attributes: [
             .font: Self.headingFont,
             .foregroundColor: VacancyPDFStyle.ink,
@@ -647,20 +655,22 @@ final class VacancyPDFDocumentBuilder {
     }
 
     func subheading(_ text: String) {
-        append(text + "\n", attributes: [.font: Self.labelFont, .foregroundColor: VacancyPDFStyle.muted])
+        append(text + "\n", attributes: [
+            .font: Self.bodyFont, .foregroundColor: VacancyPDFStyle.ink,
+            .paragraphStyle: paragraphStyle(lineSpacing: 2, paragraphSpacing: 4)
+        ])
     }
 
     func field(_ label: String, _ value: String?) {
         guard let value = value?.nilIfBlank else { return }
         let line = NSMutableAttributedString(string: label + ": ", attributes: [
-            .font: Self.labelFont, .foregroundColor: VacancyPDFStyle.muted
+            .font: Self.labelFont, .foregroundColor: VacancyPDFStyle.ink
         ])
         line.append(NSAttributedString(string: value + "\n", attributes: [
             .font: Self.bodyFont,
-            .foregroundColor: VacancyPDFStyle.ink,
-            .paragraphStyle: paragraphStyle(lineSpacing: 1.5, paragraphSpacing: 2)
+            .foregroundColor: VacancyPDFStyle.ink
         ]))
-        line.addAttribute(.paragraphStyle, value: paragraphStyle(lineSpacing: 1.5, paragraphSpacing: 3),
+        line.addAttribute(.paragraphStyle, value: paragraphStyle(lineSpacing: 2, paragraphSpacing: 4),
                           range: NSRange(location: 0, length: line.length))
         document.append(line)
     }
@@ -671,30 +681,31 @@ final class VacancyPDFDocumentBuilder {
             String(characters[start..<min(start + 64, characters.count)])
         }
         append(label + "\n", attributes: [
-            .font: Self.labelFont, .foregroundColor: VacancyPDFStyle.muted,
-            .paragraphStyle: paragraphStyle(lineSpacing: 1, paragraphSpacing: 1)
+            .font: Self.labelFont, .foregroundColor: VacancyPDFStyle.ink,
+            .paragraphStyle: paragraphStyle(lineSpacing: 2, paragraphSpacing: 2)
         ])
         append(rows.joined(separator: "\n") + "\n", attributes: [
             .font: NSFont.monospacedSystemFont(ofSize: 8.2, weight: .regular),
             .foregroundColor: VacancyPDFStyle.ink,
-            .paragraphStyle: paragraphStyle(lineSpacing: 1, paragraphSpacing: 8)
+            .paragraphStyle: paragraphStyle(lineSpacing: 2, paragraphSpacing: 8)
         ])
     }
 
     func linkField(_ label: String, _ value: String?) {
         guard let value = value?.nilIfBlank else { return }
         let line = NSMutableAttributedString(string: label + ": ", attributes: [
-            .font: Self.labelFont, .foregroundColor: VacancyPDFStyle.muted
+            .font: Self.labelFont, .foregroundColor: VacancyPDFStyle.ink
         ])
         var attributes: [NSAttributedString.Key: Any] = [
             .font: Self.bodyFont,
-            .foregroundColor: VacancyPDFStyle.ink,
-            .paragraphStyle: paragraphStyle(lineSpacing: 1.5, paragraphSpacing: 2, lineBreakMode: .byCharWrapping)
+            .foregroundColor: VacancyPDFStyle.ink
         ]
         if let url = URL(string: value), ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
             attributes[.link] = url
         }
         line.append(NSAttributedString(string: value + "\n", attributes: attributes))
+        line.addAttribute(.paragraphStyle, value: paragraphStyle(lineSpacing: 2, paragraphSpacing: 4, lineBreakMode: .byCharWrapping),
+                          range: NSRange(location: 0, length: line.length))
         document.append(line)
     }
 
@@ -702,7 +713,7 @@ final class VacancyPDFDocumentBuilder {
         append(text + "\n", attributes: [
             .font: Self.bodyFont,
             .foregroundColor: VacancyPDFStyle.ink,
-            .paragraphStyle: paragraphStyle(lineSpacing: 2.2, paragraphSpacing: 7)
+            .paragraphStyle: paragraphStyle(lineSpacing: 2, paragraphSpacing: 8)
         ])
     }
 
@@ -725,19 +736,19 @@ final class VacancyPDFDocumentBuilder {
         }
         for (offset, field) in fields.enumerated() {
             item.append(NSAttributedString(string: field.0 + ": ", attributes: [
-                .font: Self.bodyFont, .foregroundColor: VacancyPDFStyle.muted
+                .font: Self.bodyFont, .foregroundColor: VacancyPDFStyle.ink
             ]))
             var attributes: [NSAttributedString.Key: Any] = [.font: Self.bodyFont, .foregroundColor: VacancyPDFStyle.ink]
             if field.0 == "Вакансия на hh.ru", let url = URL(string: field.1) { attributes[.link] = url }
             item.append(NSAttributedString(string: field.1 + (offset == fields.count - 1 ? "\n" : "\u{2028}"), attributes: attributes))
         }
-        item.addAttribute(.paragraphStyle, value: paragraphStyle(lineSpacing: 2, paragraphSpacing: 12),
+        item.addAttribute(.paragraphStyle, value: paragraphStyle(lineSpacing: 2, paragraphSpacing: 14),
                           range: NSRange(location: 0, length: item.length))
         document.append(item)
     }
 
     func bullets(_ values: [String]) {
-        let style = paragraphStyle(lineSpacing: 1.5, paragraphSpacing: 3, headIndent: 16, firstLineHeadIndent: 0)
+        let style = paragraphStyle(lineSpacing: 2, paragraphSpacing: 4, headIndent: 16, firstLineHeadIndent: 0)
         for value in values where value.nilIfBlank != nil {
             append("–  \(value)\n", attributes: [
                 .font: Self.bodyFont, .foregroundColor: VacancyPDFStyle.ink, .paragraphStyle: style
@@ -746,14 +757,11 @@ final class VacancyPDFDocumentBuilder {
     }
 
     func html(_ content: NSAttributedString) {
-        if !document.string.hasSuffix("\n\n") {
-            document.append(NSAttributedString(
-                string: "\n",
-                attributes: [.font: Self.bodyFont, .foregroundColor: VacancyPDFStyle.ink]
-            ))
-        }
         document.append(content)
-        if !document.string.hasSuffix("\n") { document.append(NSAttributedString(string: "\n")) }
+        if !document.string.hasSuffix("\n") {
+            append("\n", attributes: [.font: Self.bodyFont, .foregroundColor: VacancyPDFStyle.ink,
+                                      .paragraphStyle: paragraphStyle(lineSpacing: 2, paragraphSpacing: 8)])
+        }
     }
 
     private func append(_ text: String, attributes: [NSAttributedString.Key: Any]) {
@@ -813,10 +821,13 @@ enum VacancyHTMLAttributedText {
             let content = line.dropFirst(indent.count)
             return content.hasPrefix("- ") ? String(indent) + "– " + content.dropFirst(2) : String(line)
         }.joined(separator: "\n")
-        return NSAttributedString(
+        let result = NSMutableAttributedString(
             string: readable,
             attributes: [.font: VacancyPDFStyle.bodyFont, .foregroundColor: VacancyPDFStyle.ink]
         )
+        removeEmptyParagraphs(in: result)
+        normalizeParagraphStyles(in: result)
+        return result
     }
 
     @MainActor
@@ -837,22 +848,34 @@ enum VacancyHTMLAttributedText {
 
         let fullRange = NSRange(location: 0, length: imported.length)
         imported.addAttribute(.foregroundColor, value: VacancyPDFStyle.ink, range: fullRange)
-        imported.enumerateAttribute(.font, in: fullRange) { value, range, _ in
-            let source = value as? NSFont ?? VacancyPDFStyle.font(ofSize: 11.5)
-            let size = min(max(source.pointSize - 2, VacancyPDFStyle.bodySize), 16)
-            var traits = source.fontDescriptor.symbolicTraits
-            traits.remove(.monoSpace)
-            let descriptor = VacancyPDFStyle.font(ofSize: size).fontDescriptor.withSymbolicTraits(traits)
-            imported.addAttribute(.font, value: NSFont(descriptor: descriptor, size: size) ?? source, range: range)
-        }
         // Replace paragraph-leading list markers and hyphens; preserve numbered lists and prose.
         let markers = try! NSRegularExpression(pattern: #"(?m)^[\t ]*([•◦▪●○■⁃-])(?=[\t ])"#)
         for match in markers.matches(in: imported.string, range: NSRange(location: 0, length: imported.length)).reversed() {
             imported.replaceCharacters(in: match.range(at: 1), with: "–")
         }
         normalizeLeadingHyphenBullets(in: imported)
+        removeEmptyParagraphs(in: imported)
         normalizeParagraphStyles(in: imported)
         return imported
+    }
+
+    private static func removeEmptyParagraphs(in text: NSMutableAttributedString) {
+        let source = text.string as NSString
+        var ranges: [NSRange] = []
+        var location = 0
+        while location < source.length {
+            var start = 0
+            var end = 0
+            var contentsEnd = 0
+            source.getParagraphStart(&start, end: &end, contentsEnd: &contentsEnd,
+                                     for: NSRange(location: location, length: 0))
+            if source.substring(with: NSRange(location: start, length: contentsEnd - start))
+                .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                ranges.append(NSRange(location: start, length: end - start))
+            }
+            location = max(end, location + 1)
+        }
+        for range in ranges.reversed() { text.deleteCharacters(in: range) }
     }
 
     private static func normalizeLeadingHyphenBullets(in text: NSMutableAttributedString) {
@@ -897,6 +920,7 @@ enum VacancyHTMLAttributedText {
             ) as? NSParagraphStyle
             let style = (original?.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
             let hasList = !style.textLists.isEmpty
+            let isBullet = hasList || content.hasPrefix("– ")
             if content.hasPrefix("–"), hasList {
                 style.textLists = style.textLists.map { _ in NSTextList(markerFormat: .init(rawValue: "–"), options: 0) }
             }
@@ -906,13 +930,14 @@ enum VacancyHTMLAttributedText {
                 && (!hasList || content.hasSuffix(":"))
 
             style.lineSpacing = 2
-            style.paragraphSpacing = hasList ? 4 : 7
+            style.paragraphSpacingBefore = 0
+            style.paragraphSpacing = isBullet ? 4 : 8
             if isBoldHeading {
                 style.textLists = []
                 style.headIndent = 0
                 style.firstLineHeadIndent = 0
-                style.paragraphSpacingBefore = max(style.paragraphSpacingBefore, 9)
-                style.paragraphSpacing = 4
+                style.paragraphSpacingBefore = 14
+                style.paragraphSpacing = 8
             } else if hasList {
                 let textColumn = style.tabStops.last?.location ?? max(style.headIndent, 18)
                 style.headIndent = textColumn
@@ -923,6 +948,10 @@ enum VacancyHTMLAttributedText {
             }
             if paragraphRange.length > 0 {
                 text.addAttribute(.paragraphStyle, value: style, range: paragraphRange)
+            }
+            if contentsRange.length > 0 {
+                text.addAttribute(.font, value: isBoldHeading ? VacancyPDFStyle.headingFont : VacancyPDFStyle.bodyFont,
+                                  range: contentsRange)
             }
             location = max(paragraphEnd, location + 1)
         }
@@ -1557,14 +1586,12 @@ final class FavoriteVacanciesPDFExporter: FavoriteVacanciesPDFExporting {
             let rule = NSBezierPath()
             rule.move(to: NSPoint(x: VacancyPDFDefaults.horizontalMargin, y: footerY - 8))
             rule.line(to: NSPoint(x: VacancyPDFDefaults.paperSize.width - VacancyPDFDefaults.horizontalMargin, y: footerY - 8))
-            NSColor(calibratedWhite: 0.82, alpha: 1).setStroke()
-            rule.lineWidth = 0.4
+            VacancyPDFStyle.ink.setStroke()
+            rule.lineWidth = 0.25
             rule.stroke()
             let footerAttributes: [NSAttributedString.Key: Any] = [
-                .font: VacancyPDFStyle.font(ofSize: 7), .foregroundColor: VacancyPDFStyle.muted
+                .font: VacancyPDFStyle.font(ofSize: 7), .foregroundColor: VacancyPDFStyle.ink
             ]
-            let documentID = page.content.length > 0 ? page.content.attribute(VacancyPDFStyle.documentID, at: 0, effectiveRange: nil) as? String : nil
-            (("Документ · " + (documentID ?? "")) as NSString).draw(at: NSPoint(x: VacancyPDFDefaults.horizontalMargin, y: footerY), withAttributes: footerAttributes)
             let pageLabel = "\(index + 1) / \(pages.count)" as NSString
             pageLabel.draw(at: NSPoint(x: VacancyPDFDefaults.paperSize.width - VacancyPDFDefaults.horizontalMargin - pageLabel.size(withAttributes: footerAttributes).width, y: footerY), withAttributes: footerAttributes)
             NSGraphicsContext.restoreGraphicsState()

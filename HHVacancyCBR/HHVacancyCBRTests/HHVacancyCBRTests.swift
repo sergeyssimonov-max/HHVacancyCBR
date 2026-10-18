@@ -2802,7 +2802,7 @@ final class HHVacancyCBRTests: XCTestCase {
             ).pointSize
         }
 
-        XCTAssertEqual(try fontSize(at: "Сведения о вакансии"), 18, accuracy: 0.01)
+        XCTAssertEqual(try fontSize(at: "Сведения о вакансии"), 17, accuracy: 0.01)
         XCTAssertEqual(try fontSize(at: "Инженер надёжности typography"), 11.5, accuracy: 0.01)
         XCTAssertEqual(try fontSize(at: "Работодатель: Банк России"), 9.5, accuracy: 0.01)
         XCTAssertEqual(
@@ -2826,6 +2826,8 @@ final class HHVacancyCBRTests: XCTestCase {
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: destination.path))
         try FavoriteVacanciesPDFExporter.validatePDF(at: destination, expectedPages: 1)
+        let text = try XCTUnwrap(PDFDocument(url: destination)?.string)
+        XCTAssertFalse(text.contains("Идентификатор документа"))
     }
 
     func testPersonalPDFCancellationOnLastPageNeverPublishesAndAllowsRetry() async throws {
@@ -3063,7 +3065,7 @@ final class HHVacancyCBRTests: XCTestCase {
             document.attribute(.paragraphStyle, at: vacancyRowRange.location, effectiveRange: nil) as? NSParagraphStyle
         )
         XCTAssertEqual(vacancyRowStyle.lineSpacing, 2)
-        XCTAssertEqual(vacancyRowStyle.paragraphSpacing, 12)
+        XCTAssertEqual(vacancyRowStyle.paragraphSpacing, 14)
         let pages = FavoriteVacanciesPDFExporter.pages(for: document)
         XCTAssertEqual(pages.map(\.content.string).joined(), document.string)
         let data = try FavoriteVacanciesPDFExporter.pdfData(for: pages)
@@ -4489,6 +4491,10 @@ final class PDFSourceEvidenceTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: root.appendingPathComponent("observations/\(first.id)/response.json")), bytes)
         XCTAssertFalse(String(data: try PDFSourceJSON.encode(first), encoding: .utf8)!.contains("SECRET"))
         XCTAssertEqual(first.parameters, ["area": "1"])
+        let materials = try store.materials(for: DocumentContext(kind: "Сведения о вакансии",
+                                                                  vacancyIDs: ["42"], observationIDs: [first.id]))
+        XCTAssertEqual(materials.map(\.path), ["sources/response-001.json"])
+        XCTAssertEqual(materials.first?.data, bytes)
         XCTAssertNil(try store.capture(data: bytes, url: url, status: 404, sent: t, received: t))
         XCTAssertThrowsError(try store.capture(data: Data(#"{"id":"42","access_token":"SECRET"}"#.utf8), url: url, status: 200, sent: t, received: t))
     }
