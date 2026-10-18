@@ -5,7 +5,6 @@ enum VacancySearchViews {
     struct MainWindow: View {
         @ObservedObject var viewModel: VacancySearchViewModel
         let refresh: () -> Void
-        @State private var showingArchive = false
 
         private enum ToolbarMetrics {
             static let controlHeight: CGFloat = 32
@@ -29,7 +28,6 @@ enum VacancySearchViews {
                 content
             }
             .background(DeskPalette.content)
-            .sheet(isPresented: $showingArchive) { MonitoringArchiveView() }
         }
 
         private var toolbar: some View {
@@ -66,17 +64,19 @@ enum VacancySearchViews {
                 .frame(height: ToolbarMetrics.controlHeight)
                 .accessibilityIdentifier("regionFilterPicker")
 
-                Button {
-                    if viewModel.isLoading { viewModel.cancelSearch() } else { refresh() }
-                } label: {
-                    Text(refreshButtonTitle)
-                        .frame(maxWidth: .infinity)
+                if !viewModel.isShowingFavorites {
+                    Button {
+                        if viewModel.isLoading { viewModel.cancelSearch() } else { refresh() }
+                    } label: {
+                        Text(refreshButtonTitle)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .frame(width: ToolbarMetrics.refreshWidth, height: ToolbarMetrics.controlHeight)
+                    .disabled(viewModel.isLoading ? !viewModel.canCancelSearch : !viewModel.canSearch)
+                    .help(viewModel.isLoading ? "Остановить загрузку; сохранится предыдущая полная выборка" : "Обновить выборку вакансий")
+                    .accessibilityIdentifier("searchVacanciesButton")
                 }
-                .buttonStyle(.borderedProminent)
-                .frame(width: ToolbarMetrics.refreshWidth, height: ToolbarMetrics.controlHeight)
-                .disabled(viewModel.isLoading ? !viewModel.canCancelSearch : !viewModel.canSearch)
-                .help(viewModel.isLoading ? "Остановить загрузку; сохранится предыдущая полная выборка" : "Обновить выборку вакансий")
-                .accessibilityIdentifier("searchVacanciesButton")
             }
             .controlSize(.large)
             // Match the status bar and cards; native button insets vary by macOS version.
@@ -96,7 +96,9 @@ enum VacancySearchViews {
         }
 
         @ViewBuilder private var content: some View {
-            if viewModel.isLoading && viewModel.displayedResults.isEmpty {
+            if viewModel.isShowingFavorites && viewModel.displayedResults.isEmpty {
+                empty(title: "В избранном пока нет вакансий", message: "Добавьте вакансию в избранное из общего списка.", action: nil)
+            } else if viewModel.isLoading && viewModel.displayedResults.isEmpty {
                 VStack(spacing: 12) { ProgressView(); Text("Загружаем вакансии всех настроенных работодателей…") }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let error = viewModel.errorMessage, viewModel.displayedResults.isEmpty {
@@ -120,7 +122,7 @@ enum VacancySearchViews {
                     }
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
-                    if let updatedAt = viewModel.updatedAtMessage {
+                    if !viewModel.isShowingFavorites, let updatedAt = viewModel.updatedAtMessage {
                         Text(updatedAt)
                             .font(.caption)
                             .lineLimit(1)
@@ -143,7 +145,6 @@ enum VacancySearchViews {
                         : !viewModel.canExportFavoritesPDF)
                         .accessibilityIdentifier("exportFavoritesPDFButton")
                 }
-                Button("История и архив") { showingArchive = true }.buttonStyle(.plain)
                 PDFExportCommand(title: viewModel.isExportingStatisticsPDF ? "Сохранение…" : "Статистика в PDF") {
                     Task { await viewModel.exportStatisticsPDF() }
                 }
@@ -186,18 +187,20 @@ enum VacancySearchViews {
                 .font(.caption).foregroundColor(.secondary).padding(.horizontal, 28).padding(.vertical, 10)
         }
 
-        private func empty(title: String, message: String, action: String) -> some View {
+        private func empty(title: String, message: String, action: String?) -> some View {
             VStack(spacing: 12) {
                 Text(title).font(.headline)
                 Text(message).foregroundColor(.secondary).multilineTextAlignment(.center).frame(maxWidth: 520)
-                Button(action: refresh) {
-                    Text(action)
-                        .frame(maxWidth: .infinity)
+                if let action {
+                    Button(action: refresh) {
+                        Text(action)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .frame(width: ToolbarMetrics.refreshWidth, height: ToolbarMetrics.controlHeight)
+                    .accessibilityIdentifier("emptyRefreshVacanciesButton")
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .frame(width: ToolbarMetrics.refreshWidth, height: ToolbarMetrics.controlHeight)
-                .accessibilityIdentifier("emptyRefreshVacanciesButton")
             }.padding(32).frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }

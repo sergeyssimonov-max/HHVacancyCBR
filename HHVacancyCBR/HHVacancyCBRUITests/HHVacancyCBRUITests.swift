@@ -9,16 +9,16 @@ final class HHVacancyCBRUITests: XCTestCase {
         return app
     }
 
-    func testArchiveUsesPDFOnlyAndKeepsMainToolbar() {
+    func testFavoritesHasNoHistoryOrRefreshAction() {
         let app = launch()
-        let archive = app.buttons["История и архив"]
-        XCTAssertTrue(archive.waitForExistence(timeout: 5))
-        archive.click()
-        XCTAssertTrue(app.staticTexts["История наблюдений и архив документов"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["Комплект ZIP"].exists)
-        XCTAssertTrue(app.buttons["Отчёт за период в PDF"].exists)
-        app.buttons["Закрыть"].click()
+        XCTAssertFalse(app.buttons["История и архив"].exists)
         XCTAssertTrue(app.buttons["searchVacanciesButton"].exists)
+        let favoriteMode = app.radioButtons.matching(NSPredicate(format: "label BEGINSWITH %@", "Избранное")).firstMatch
+        XCTAssertTrue(favoriteMode.waitForExistence(timeout: 5))
+        favoriteMode.click()
+        XCTAssertFalse(app.buttons["searchVacanciesButton"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["vacancyUpdateStatus"].exists)
+        XCTAssertTrue(app.staticTexts["В избранном пока нет вакансий"].exists)
     }
 
     func testSearchShowsConfiguredVacanciesAndLazyDetails() {

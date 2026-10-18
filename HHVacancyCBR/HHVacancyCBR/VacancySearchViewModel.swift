@@ -790,7 +790,6 @@ final class VacancySearchViewModel: ObservableObject {
             sourceNote: note
         )
         report.categoryName = fieldInstitutionsOnly ? "Полевые учреждения" : "Все вакансии"
-        if cache?.issues.isEmpty == false || errorMessage != nil { DocumentArchive.shared.diagnostic("Экспорт сохранённой выборки после неполного обновления") }
         return report
     }
 

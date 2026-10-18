@@ -248,7 +248,6 @@ struct HHAPIClient: HHVacancyAPIClient, Sendable {
                     continue
                 }
                 guard let http = response as? HTTPURLResponse else { throw HHAPIError.invalidResponse }
-                if !(200...299).contains(http.statusCode) { DocumentArchive.shared.diagnostic("HeadHunter API HTTP \(http.statusCode)") }
                 if http.statusCode == 429 || (Self.transientStatusCodes.contains(http.statusCode)
                     && http.value(forHTTPHeaderField: "Retry-After") != nil) {
                     await requestGate.imposeCooldown(seconds: Self.serverDelay(
@@ -258,10 +257,9 @@ struct HHAPIClient: HHVacancyAPIClient, Sendable {
                 try Task.checkCancellation()
                 if (200...299).contains(http.statusCode) {
                     if let token = accessTokenProvider.accessToken, !token.isEmpty, data.range(of: Data(token.utf8)) != nil {
-                        DocumentArchive.shared.diagnostic("Ответ API содержит значение токена; сохранение отклонено")
-                        throw ArchiveError.invalid("Секрет в ответе API")
+                        throw PDFSourceError.invalid("Секрет в ответе API")
                     }
-                    let observation = try DocumentArchive.shared.capture(data: data, url: request.url!, status: http.statusCode, sent: sentAt, received: Date())
+                    let observation = try PDFSourceEvidence.shared.capture(data: data, url: request.url!, status: http.statusCode, sent: sentAt, received: Date())
                     return (data, observation?.id)
                 }
                 let body = try? JSONDecoder().decode(HHErrorResponse.self, from: data)

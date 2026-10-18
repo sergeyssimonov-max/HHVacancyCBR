@@ -1113,7 +1113,7 @@ final class HHVacancyCBRTests: XCTestCase {
         try originalData.write(to: original)
         let exporter = FavoriteVacanciesPDFExporter(chooseDirectory: { directory }, now: { date })
         let outcome = try await exporter.export(vacancies: [makePDFVacancy(id: "suffix")]) { _ in }
-        XCTAssertEqual(outcome, .exported(fileCount: 1, pageCount: 1))
+        XCTAssertEqual(outcome, .exported(fileCount: 1, pageCount: 2))
         XCTAssertEqual(try Data(contentsOf: original), originalData)
         let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
             .filter { $0.pathExtension == "pdf" && $0.lastPathComponent != name }
@@ -2639,7 +2639,7 @@ final class HHVacancyCBRTests: XCTestCase {
             progressValues.append(progress)
         }
 
-        XCTAssertEqual(outcome, .exported(fileCount: 2, pageCount: 101))
+        XCTAssertEqual(outcome, .exported(fileCount: 2, pageCount: 103))
         XCTAssertEqual(progressValues.first, .init(completedVacancies: 1, totalVacancies: 101))
         XCTAssertEqual(progressValues.last, .init(completedVacancies: 101, totalVacancies: 101))
         XCTAssertTrue(progressValues.allSatisfy { $0.totalVacancies == 101 })
@@ -2656,7 +2656,7 @@ final class HHVacancyCBRTests: XCTestCase {
         XCTAssertEqual(pdfs.count, 2)
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path).count, 2, "Only the PDFs are written")
         try FavoriteVacanciesPDFExporter.validatePDF(at: pdfs[0], expectedPages: 100)
-        try FavoriteVacanciesPDFExporter.validatePDF(at: pdfs[1], expectedPages: 1)
+        try FavoriteVacanciesPDFExporter.validatePDF(at: pdfs[1], expectedPages: 3)
         let documents = try pdfs.map { try XCTUnwrap(PDFDocument(url: $0)) }
         let text = try documents.map(extractedStatisticsText).joined(separator: "\n")
         var previous = text.startIndex
@@ -2689,7 +2689,7 @@ final class HHVacancyCBRTests: XCTestCase {
 
         selectedDirectory = directory
         let completed = try await exporter.export(vacancies: [vacancy]) { _ in }
-        XCTAssertEqual(completed, .exported(fileCount: 1, pageCount: 1))
+        XCTAssertEqual(completed, .exported(fileCount: 1, pageCount: 2))
     }
 
     func testPDFPaginationPreservesOversizedUnicodeContentAndRendersEveryPage() throws {
@@ -2802,8 +2802,8 @@ final class HHVacancyCBRTests: XCTestCase {
             ).pointSize
         }
 
-        XCTAssertEqual(try fontSize(at: "Инженер надёжности typography"), 26, accuracy: 0.01)
-        XCTAssertEqual(try fontSize(at: "Основная информация"), 14, accuracy: 0.01)
+        XCTAssertEqual(try fontSize(at: "Сведения о вакансии"), 18, accuracy: 0.01)
+        XCTAssertEqual(try fontSize(at: "Инженер надёжности typography"), 11.5, accuracy: 0.01)
         XCTAssertEqual(try fontSize(at: "Работодатель: Банк России"), 9.5, accuracy: 0.01)
         XCTAssertEqual(
             try fontSize(at: "Работодатель: Банк России", offset: ("Работодатель: " as NSString).length),
@@ -2890,7 +2890,7 @@ final class HHVacancyCBRTests: XCTestCase {
         XCTAssertEqual(files.count, 2)
         for file in files {
             let pdf = try XCTUnwrap(PDFDocument(url: file))
-            XCTAssertEqual(pdf.pageCount, 1)
+            XCTAssertEqual(pdf.pageCount, file.lastPathComponent == "personal.pdf" ? 1 : 2)
             let text = try extractedStatisticsText(pdf)
             // Use word markers: PDFKit versions can reorder punctuation during
             // extraction. Check exact source content and one complete occurrence
@@ -2903,9 +2903,9 @@ final class HHVacancyCBRTests: XCTestCase {
                                "Extracted synthetic PDF text: \(text)")
             }
             XCTAssertTrue(text.contains("DepartmentFallback"), "Lost summary department")
-            XCTAssertTrue(text.contains("2026-09-02T12:34:56+0300"), "Lost summary publication date")
+            XCTAssertTrue(text.contains("02.09.2026 12:34:56"), "Lost summary publication date")
             XCTAssertTrue(text.contains("123 456"), "Lost summary salary")
-            XCTAssertTrue(text.contains("https://example.invalid/fallback-fields"))
+            XCTAssertTrue(text.contains("https://hh.ru/vacancy/fallback-fields"))
             XCTAssertFalse(text.contains("Полное описание из detail endpoint HH недоступно."))
             let attachment = XCTAttachment(data: try Data(contentsOf: file), uniformTypeIdentifier: "com.adobe.pdf")
             attachment.name = file.lastPathComponent == "personal.pdf" ? "Fallback personal PDF" : "Fallback favorites PDF"
@@ -2928,10 +2928,10 @@ final class HHVacancyCBRTests: XCTestCase {
         let pages = FavoriteVacanciesPDFExporter.pages(for: VacancyPDFFormatter.attributedDocument(for: value))
         let pdf = try XCTUnwrap(PDFDocument(data: FavoriteVacanciesPDFExporter.pdfData(for: pages)))
         let text = try extractedStatisticsText(pdf)
-        for expected in ["DetailDepartment", "2026-09-02T10:00:00Z", "987 654"] {
+        for expected in ["DetailDepartment", VacancyPDFStyle.publicationDate("2026-09-02T10:00:00Z"), "987 654"] {
             XCTAssertTrue(text.contains(expected))
         }
-        for absent in ["SummaryDepartment", "2026-09-01T10:00:00Z", "123 456"] {
+        for absent in ["SummaryDepartment", VacancyPDFStyle.publicationDate("2026-09-01T10:00:00Z"), "123 456"] {
             XCTAssertFalse(text.contains(absent))
         }
     }
@@ -3018,15 +3018,18 @@ final class HHVacancyCBRTests: XCTestCase {
             XCTAssertEqual(restored.searchResult.applicationStatusText, expected)
             let text = try statisticsFixture([vacancy]).attributedDocument().string
             for field in ["Идентификатор вакансии: metadata", "Дата публикации: Не указана",
-                          "Статус: Не проверен", "Приём откликов: " + expected] {
+                          "Приём откликов: " + expected] {
                 XCTAssertTrue(text.contains(field))
             }
+            XCTAssertFalse(text.contains("Статус: Не проверен"))
         }
         let report = statisticsFixture((0..<30).map { statisticsVacancy(id: "row-\($0)", date: nil) })
         let pages = FavoriteVacanciesPDFExporter.pages(for: try report.attributedDocument())
         for entry in report.entries {
             let page = try XCTUnwrap(pages.first { $0.content.string.contains("Идентификатор вакансии: " + entry.id + "\u{2028}") })
-            XCTAssertTrue(page.content.string.contains(entry.name + "\u{2028}Идентификатор вакансии: " + entry.id + "\u{2028}Дата публикации: Не указана\u{2028}Статус: Активна\u{2028}Приём откликов: Не указан"))
+            XCTAssertTrue(page.content.string.contains(entry.name + "\u{2028}Идентификатор вакансии: " + entry.id))
+            XCTAssertTrue(page.content.string.contains("Дата публикации: Не указана"))
+            XCTAssertTrue(page.content.string.contains("Приём откликов: Не указан"))
         }
     }
 
@@ -3053,14 +3056,14 @@ final class HHVacancyCBRTests: XCTestCase {
                 XCTFail("В строке вакансии должен быть задан шрифт")
                 return
             }
-            XCTAssertEqual(font.pointSize, 11)
-            XCTAssertFalse(font.fontDescriptor.symbolicTraits.contains(.bold))
+            XCTAssertEqual(font.pointSize, 10.5)
+            XCTAssertTrue(font.fontDescriptor.symbolicTraits.contains(.bold))
         }
         let vacancyRowStyle = try XCTUnwrap(
             document.attribute(.paragraphStyle, at: vacancyRowRange.location, effectiveRange: nil) as? NSParagraphStyle
         )
-        XCTAssertEqual(vacancyRowStyle.lineSpacing, 3)
-        XCTAssertEqual(vacancyRowStyle.paragraphSpacing, 16)
+        XCTAssertEqual(vacancyRowStyle.lineSpacing, 2)
+        XCTAssertEqual(vacancyRowStyle.paragraphSpacing, 12)
         let pages = FavoriteVacanciesPDFExporter.pages(for: document)
         XCTAssertEqual(pages.map(\.content.string).joined(), document.string)
         let data = try FavoriteVacanciesPDFExporter.pdfData(for: pages)
@@ -3467,9 +3470,9 @@ final class HHVacancyCBRTests: XCTestCase {
         let text = try extractedStatisticsText(pdf)
         XCTAssertGreaterThan(pdf.pageCount, 0, context, file: file, line: line)
         XCTAssertTrue(text.contains("Всего вакансий: \(expected.count)"), context, file: file, line: line)
-        XCTAssertTrue(text.contains("Список: \(snapshot.modeName)"), context, file: file, line: line)
-        XCTAssertTrue(text.contains("Работодатель: \(snapshot.employerName)"), context, file: file, line: line)
-        XCTAssertTrue(text.contains("Регион: \(snapshot.regionName)"), context, file: file, line: line)
+        XCTAssertEqual(text.contains("Список: \(snapshot.modeName)"), snapshot.modeName != "Все вакансии", context, file: file, line: line)
+        XCTAssertEqual(text.contains("Работодатель: \(snapshot.employerName)"), employer != "all", context, file: file, line: line)
+        XCTAssertEqual(text.contains("Регион: \(snapshot.regionName)"), region != "all", context, file: file, line: line)
         let expectedRows = statisticsFilterRows.filter { expected.contains($0.id) }
         XCTAssertTrue(text.contains("Работодателей: \(Set(expectedRows.map(\.employer)).count)"), context, file: file, line: line)
         XCTAssertTrue(text.contains("Регионов / территориальных групп: \(Set(expectedRows.map(\.region)).count)"), context, file: file, line: line)
@@ -3649,7 +3652,7 @@ final class HHVacancyCBRTests: XCTestCase {
         }
         let prepared = try await preparation.value
         XCTAssertGreaterThan(interactionsDuringPDF, 1)
-        XCTAssertEqual(prepared.pageCount, 100)
+        XCTAssertEqual(prepared.pageCount, 102)
         XCTAssertEqual(completed, 100)
         let details = await client.requestedDetailIDs
         let searches = await client.searchRequestCount
@@ -4462,7 +4465,7 @@ private actor FieldSearchClient: HHVacancyAPIClient {
     func vacancyDictionaries() async throws -> HHVacancyDictionaries { .init(experience: [], workFormat: [], schedule: []) }
 }
 
-final class DocumentArchiveTests: XCTestCase {
+final class PDFSourceEvidenceTests: XCTestCase {
     func testStreebogRFC6986AndLegacySHA256() throws {
         let first = Data("012345678901234567890123456789012345678901234567890123456789012".utf8)
         let hex = "d1e520e2e5f2f0e82c20d1f2f0e8e1eee6e820e2edf3f6e82c20e2e5fef2fa20f120eceef0ff20f1f2f0e5ebe0ece820ede020f5f0e0e1f0fbff20efebfaeafb20c8e3eef0e5e2fb"
@@ -4473,53 +4476,26 @@ final class DocumentArchiveTests: XCTestCase {
         XCTAssertEqual(try MaterialHash.digest(Data("abc".utf8), algorithm: "SHA-256"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
         XCTAssertThrowsError(try MaterialHash.digest(first, algorithm: "unknown"))
     }
-    func testObservationAppendOnlyPeriodSelectionAndOriginalBytes() throws {
+    func testSourceReceiptAppendOnlyAndOriginalBytes() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
-        let store = DocumentArchive(root: root)
+        let store = PDFSourceEvidence(root: root)
         let bytes = Data(#"{ "id":"42", "name":"Экономист", "archived":false, "published_at":"2026-10-17T10:15:16+0300" }"#.utf8)
         let url = URL(string: "https://api.hh.ru/vacancies/42?access_token=SECRET&area=1")!
         let t = Date(timeIntervalSince1970: 1_790_000_000)
         let first = try XCTUnwrap(store.capture(data: bytes, url: url, status: 200, sent: t, received: t.addingTimeInterval(1)))
         let second = try XCTUnwrap(store.capture(data: bytes, url: url, status: 200, sent: t.addingTimeInterval(9), received: t.addingTimeInterval(10)))
         XCTAssertNotEqual(first.id, second.id)
-        XCTAssertEqual(try store.observations().count, 2)
-        XCTAssertEqual(try store.history(from: t, to: t.addingTimeInterval(5)).count, 1)
         XCTAssertEqual(try Data(contentsOf: root.appendingPathComponent("observations/\(first.id)/response.json")), bytes)
-        XCTAssertFalse(String(data: try ArchiveJSON.encode(first), encoding: .utf8)!.contains("SECRET"))
+        XCTAssertFalse(String(data: try PDFSourceJSON.encode(first), encoding: .utf8)!.contains("SECRET"))
         XCTAssertEqual(first.parameters, ["area": "1"])
         XCTAssertNil(try store.capture(data: bytes, url: url, status: 404, sent: t, received: t))
-        XCTAssertEqual(try store.observations().count, 2)
         XCTAssertThrowsError(try store.capture(data: Data(#"{"id":"42","access_token":"SECRET"}"#.utf8), url: url, status: 200, sent: t, received: t))
     }
-    func testManifestIntegrityRestoreAndTraversal() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: root) }
-        let store = DocumentArchive(root: root)
-        let pdf = Data("%PDF-original-bytes".utf8)
-        let context = DocumentContext(kind: "fixture", vacancyIDs: ["42"])
-        let folder = try store.archive(pdf: pdf, context: context)
-        try store.verify(folder)
-        let restored = root.appendingPathComponent("restored.pdf")
-        try store.restore(id: context.id, destination: restored)
-        XCTAssertEqual(try Data(contentsOf: restored), pdf)
-        XCTAssertThrowsError(try store.archive(pdf: Data(), context: context))
-        XCTAssertNotEqual(context.id, DocumentContext(kind: "fixture", vacancyIDs: ["42"]).id)
-        try Data("corrupt".utf8).write(to: folder.appendingPathComponent("document.pdf"))
-        XCTAssertThrowsError(try store.verify(folder))
-        try pdf.write(to: folder.appendingPathComponent("document.pdf"))
-        let manifestURL = folder.appendingPathComponent("manifest.json")
-        let original = try Data(contentsOf: manifestURL)
-        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: original) as? [String: Any])
-        var files = try XCTUnwrap(json["files"] as? [[String: Any]])
-        files[0]["path"] = "../outside.pdf"; json["files"] = files
-        try JSONSerialization.data(withJSONObject: json).write(to: manifestURL)
-        XCTAssertThrowsError(try store.verify(folder))
-        XCTAssertThrowsError(try store.restore(id: "../escape", destination: restored))
-    }
+
 }
 
-extension DocumentArchiveTests {
+extension PDFSourceEvidenceTests {
     func testPDFContainsExactOriginalBinaryAttachmentsAndReadablePages() throws {
         let bytes = Data([0, 10, 13, 127, 128, 255]) + Data("endstream\nendobj\n(•) Кириллица".utf8)
         let page = NSAttributedString(string: "Проверка вложений PDF", attributes: [.font: VacancyPDFStyle.bodyFont])
