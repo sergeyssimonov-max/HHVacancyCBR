@@ -120,10 +120,7 @@ enum VacancySearchViews {
                     Text(updatedAt)
                         .accessibilityIdentifier("vacancyUpdateStatus")
                 }
-                if let message = viewModel.statisticsPDFExportMessage ?? viewModel.statusMessage,
-                   !message.hasPrefix("Готово"), !message.hasPrefix("Показана сохранённая") {
-                    Text(message).truncationMode(.tail).help(message).layoutPriority(-1)
-                }
+                VacancyStatusMessage(message: viewModel.statisticsPDFExportMessage ?? viewModel.statusMessage)
                 Spacer()
                 Group {
                     if let progress = viewModel.bulkPDFExportProgress {
@@ -336,4 +333,18 @@ struct VacancyHTMLDescriptionView: NSViewRepresentable {
 enum DeskPalette {
     static let content = Color(nsColor: .textBackgroundColor)
     static let toolbar = Color(nsColor: .windowBackgroundColor)
+}
+
+/// Suppresses summaries already represented by the vacancy counters.
+struct VacancyStatusMessage: View {
+    let message: String?
+
+    var body: some View {
+        if let message, !message.hasPrefix("Готово"), !message.hasPrefix("Показана сохранённая") {
+            Text(message)
+                .truncationMode(.tail)
+                .help(message)
+                .layoutPriority(-1)
+        }
+    }
 }
