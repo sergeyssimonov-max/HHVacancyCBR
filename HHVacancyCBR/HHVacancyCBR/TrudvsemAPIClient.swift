@@ -8,7 +8,7 @@ actor TrudvsemRequestGate {
     private var next = Date.distantPast
     func wait() async throws {
         let now = Date(), slot = max(Date(), next)
-        next = slot.addingTimeInterval(0.35)
+        next = slot.addingTimeInterval(1.5)
         if slot > now { try await Task.sleep(nanoseconds: UInt64(slot.timeIntervalSince(now) * 1_000_000_000)) }
         try Task.checkCancellation()
     }

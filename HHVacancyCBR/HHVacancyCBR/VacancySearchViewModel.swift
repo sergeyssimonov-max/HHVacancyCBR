@@ -290,6 +290,9 @@ final class VacancySearchViewModel: ObservableObject {
         errorMessage = nil
         defer { isLoading = false }
         do {
+            statusMessage = "Ожидание очереди обновления…"
+            try await VacancyRefreshScheduler.acquire()
+            defer { VacancyRefreshScheduler.release() }
             let employers = try employerStore.loadOrCreate().employers
             configuredEmployers = employers
             statusMessage = "Загружается справочник регионов."

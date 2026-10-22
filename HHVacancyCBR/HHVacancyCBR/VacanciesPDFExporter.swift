@@ -1319,6 +1319,7 @@ actor PDFExportWorker {
         if !current.pages.isEmpty { chunks.append(current) }
         var parts: [PreparedPart] = []
         var previousIDs = Set<String>()
+        var pageOffset = 0
         for (index, chunk) in chunks.enumerated() {
             try Task.checkCancellation()
             await progress(.init(completedVacancies: vacancies.values.count, totalVacancies: vacancies.values.count,
@@ -1327,7 +1328,8 @@ actor PDFExportWorker {
             let continuation = !previousIDs.isDisjoint(with: c.vacancyIDs)
             let pages = header(c, part: index + 1, total: chunks.count, continuation: continuation) + chunk.pages
             guard pages.count <= limit else { throw PDFSourceError.invalid("Превышен лимит страниц") }
-            let rendered = try documentedData(pages: pages, context: c)
+            let rendered = try documentedData(pages: pages, context: c, pageOffset: pageOffset)
+            pageOffset += pages.count
             let file = staging.appendingPathComponent("part-\(index).pdf")
             try rendered.data.write(to: file, options: .atomic)
             parts.append(.init(file: file, pageCount: rendered.count, context: c))
@@ -1352,10 +1354,10 @@ actor PDFExportWorker {
         _ = try PDFNewFileWriter.write([data], names: [destination.lastPathComponent], in: destination.deletingLastPathComponent())
     }
 
-    private func documentedData(pages: [VacanciesPDFExporter.Page], context: DocumentContext,
+    private func documentedData(pages: [VacanciesPDFExporter.Page], context: DocumentContext, pageOffset: Int = 0,
                                 didRenderPage: (@Sendable (Int) -> Void)? = nil) throws -> (data: Data, count: Int) {
         let materials = try PDFSourceEvidence.shared.materials(for: context)
-        let rendered = try VacanciesPDFExporter.pdfData(for: pages, didRenderPage: didRenderPage)
+        let rendered = try VacanciesPDFExporter.pdfData(for: pages, pageOffset: pageOffset, didRenderPage: didRenderPage)
         let data = try PDFOriginalMaterials.embed(materials, in: rendered)
         try VacanciesPDFExporter.validatePDF(data: data, expectedPages: pages.count)
         return (data, pages.count)
@@ -1599,6 +1601,7 @@ final class VacanciesPDFExporter: VacanciesPDFExporting {
 
     nonisolated static func pdfData(
         for pages: [Page],
+        pageOffset: Int = 0,
         didRenderPage: (@Sendable (Int) -> Void)? = nil
     ) throws -> Data {
         let data = NSMutableData()
@@ -1617,11 +1620,6 @@ final class VacanciesPDFExporter: VacanciesPDFExporting {
             context.scaleBy(x: 1, y: -1)
             NSGraphicsContext.saveGraphicsState()
             NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
-            if index > 0, page.content.length > 0,
-               let kind = page.content.attribute(VacancyPDFStyle.documentKind, at: 0, effectiveRange: nil) as? String {
-                (kind as NSString).draw(in: NSRect(x: VacancyPDFDefaults.horizontalMargin, y: 22, width: 483, height: 20),
-                                       withAttributes: [.font: VacancyPDFStyle.font(ofSize: 7), .foregroundColor: NSColor.black])
-            }
             let monochromeContent = NSMutableAttributedString(attributedString: page.content)
             monochromeContent.removeAttribute(.link, range: NSRange(location: 0, length: monochromeContent.length))
             monochromeContent.draw(
@@ -1658,7 +1656,7 @@ final class VacanciesPDFExporter: VacanciesPDFExporting {
             let footerAttributes: [NSAttributedString.Key: Any] = [
                 .font: VacancyPDFStyle.font(ofSize: 7), .foregroundColor: VacancyPDFStyle.ink
             ]
-            let pageLabel = "\(index + 1) / \(pages.count)" as NSString
+            let pageLabel = "\(pageOffset + index + 1)" as NSString
             pageLabel.draw(at: NSPoint(x: VacancyPDFDefaults.paperSize.width - VacancyPDFDefaults.horizontalMargin - pageLabel.size(withAttributes: footerAttributes).width, y: footerY), withAttributes: footerAttributes)
             NSGraphicsContext.restoreGraphicsState()
             context.restoreGState()

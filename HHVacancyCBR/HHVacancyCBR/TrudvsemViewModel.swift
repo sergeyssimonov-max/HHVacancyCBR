@@ -89,6 +89,9 @@ final class TrudvsemViewModel: ObservableObject {
         isLoading = true; errorMessage = nil
         defer { isLoading = false }
         do {
+            statusMessage = "Ожидание очереди обновления…"
+            try await VacancyRefreshScheduler.acquire()
+            defer { VacancyRefreshScheduler.release() }
             _ = try employerStore.loadOrCreate()
             let collection = try await TrudvsemCollectionService(client: client).collect { [weak self] in self?.statusMessage = $0 }
             try Task.checkCancellation()

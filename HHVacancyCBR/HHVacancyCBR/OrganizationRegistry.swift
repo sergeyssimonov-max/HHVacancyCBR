@@ -85,3 +85,14 @@ struct TrudvsemEmployerConfigurationStore: Sendable {
         try JSONEncoder().encode(value).write(to: url, options: .atomic)
     }
 }
+
+/// Keeps full source refreshes from competing for network and persistence resources.
+@MainActor enum VacancyRefreshScheduler {
+    private static var busy = false
+    static func acquire() async throws {
+        while busy { try await Task.sleep(nanoseconds: 200_000_000) }
+        try Task.checkCancellation()
+        busy = true
+    }
+    static func release() { busy = false }
+}

@@ -64,13 +64,20 @@ struct TrudvsemViews: View {
             }
         }.background(DeskPalette.content)
     }
+    private func descriptionHTML(_ value: TrudvsemVacancy) -> String {
+        let keys = ["duty", "requirement", "requirements", "qualification", "education", "experience", "schedule", "employment", "term", "social_protected"]
+        return keys.compactMap { key -> String? in
+            let text = value.dto.raw[key].readable
+            guard value.dto.raw[key] != .null, !text.isEmpty else { return nil }
+            return "<h3>\(TrudvsemPDFFormatter.labels[key] ?? key)</h3>\(text)"
+        }.joined(separator: "\n")
+    }
     private func card(_ value: TrudvsemVacancy) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(value.title).font(.system(size: 15, weight: .semibold))
                     Text(value.organization?.name ?? value.organizationKey).font(.system(size: 13)).foregroundColor(.secondary)
-                    Text(value.department).font(.caption).foregroundColor(.secondary)
                     if value.fieldInstitution.isMember { Text("Полевое учреждение").font(.caption).help(value.fieldInstitution.reason ?? "") }
                 }
                 Spacer()
@@ -81,7 +88,7 @@ struct TrudvsemViews: View {
                 }
             }
             HStack(spacing: 10) {
-                if let url = value.url { Link("Открыть на trudvsem.ru ↗", destination: url) }
+                if let url = value.url { Button("Открыть на trudvsem.ru ↗") { NSWorkspace.shared.open(url) } }
                 Button("Скопировать ссылку") {
                     guard let url = value.url else { return }
                     NSPasteboard.general.clearContents(); NSPasteboard.general.setString(url.absoluteString, forType: .string)
@@ -91,14 +98,8 @@ struct TrudvsemViews: View {
                 PDFExportCommand(title: "Экспорт в PDF") { viewModel.export(.personal(value)) }.disabled(viewModel.isExporting)
             }.buttonStyle(.borderless)
             if viewModel.expandedID == value.id {
-                ForEach((value.dto.raw.fields ?? [:]).keys.sorted(), id: \.self) { key in
-                    if value.dto.raw[key] != .null {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(TrudvsemPDFFormatter.labels[key] ?? key).fontWeight(.semibold)
-                            Text(value.dto.raw[key].readable).textSelection(.enabled)
-                        }.font(.caption)
-                    }
-                }
+                VacancyHTMLDescriptionView(html: descriptionHTML(value)).frame(minHeight: 320)
+
             }
         }.padding(.horizontal, 28).padding(.vertical, 18)
     }
