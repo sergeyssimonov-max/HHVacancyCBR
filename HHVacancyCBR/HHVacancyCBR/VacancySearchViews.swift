@@ -10,7 +10,6 @@ enum VacancySearchViews {
         private enum ToolbarMetrics {
             static let controlHeight: CGFloat = 32
             static let modeWidth: CGFloat = 220
-            static let refreshWidth: CGFloat = 120
         }
 
         var body: some View {
@@ -65,14 +64,9 @@ enum VacancySearchViews {
                 .accessibilityIdentifier("regionFilterPicker")
 
                 Group {
-                    Button {
+                    VacancyRefreshButton(title: refreshButtonTitle) {
                         if viewModel.isLoading { viewModel.cancelSearch() } else { refresh() }
-                    } label: {
-                        Text(refreshButtonTitle)
-                            .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .frame(width: ToolbarMetrics.refreshWidth, height: ToolbarMetrics.controlHeight)
                     .disabled(viewModel.isLoading ? !viewModel.canCancelSearch : !viewModel.canSearch)
                     .help(viewModel.isLoading ? "Остановить загрузку; сохранится предыдущая полная выборка" : "Обновить выборку вакансий")
                     .accessibilityIdentifier("searchVacanciesButton")
@@ -183,13 +177,7 @@ enum VacancySearchViews {
                 Text(title).font(.headline)
                 Text(message).foregroundColor(.secondary).multilineTextAlignment(.center).frame(maxWidth: 520)
                 if let action {
-                    Button(action: refresh) {
-                        Text(action)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .frame(width: ToolbarMetrics.refreshWidth, height: ToolbarMetrics.controlHeight)
+                    VacancyRefreshButton(title: action, action: refresh)
                     .accessibilityIdentifier("emptyRefreshVacanciesButton")
                 }
             }.padding(32).frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -346,5 +334,20 @@ struct VacancyStatusMessage: View {
                 .help(message)
                 .layoutPriority(-1)
         }
+    }
+}
+
+/// Shared geometry for every refresh/cancel control, regardless of its title.
+struct VacancyRefreshButton: View {
+    let title: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title).frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+        .frame(width: 120, height: 32)
     }
 }

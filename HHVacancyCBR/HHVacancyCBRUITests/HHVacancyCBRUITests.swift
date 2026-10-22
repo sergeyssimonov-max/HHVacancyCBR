@@ -15,8 +15,11 @@ final class HHVacancyCBRUITests: XCTestCase {
         XCTAssertTrue(refresh.waitForExistence(timeout: 5))
         refresh.click()
         XCTAssertTrue(app.staticTexts["vacancyTitle.ui-1"].waitForExistence(timeout: 8))
+        let refreshSize = refresh.frame.size
         app.radioButtons["trudvsem.ru"].click()
         XCTAssertTrue(app.buttons["refreshTrudvsemButton"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["refreshTrudvsemButton"].frame.width, refreshSize.width, accuracy: 1)
+        XCTAssertEqual(app.buttons["refreshTrudvsemButton"].frame.height, refreshSize.height, accuracy: 1)
         XCTAssertFalse(app.buttons["searchVacanciesButton"].exists)
         app.buttons["refreshTrudvsemButton"].click()
         XCTAssertTrue(app.staticTexts["Администратор баз данных"].waitForExistence(timeout: 8))

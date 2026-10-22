@@ -44,9 +44,9 @@ struct TrudvsemViews: View {
             Picker("Субъект", selection: $viewModel.selectedRegionID) {
                 ForEach(viewModel.regions) { Text($0.title).tag($0.id) }
             }.labelsHidden().frame(minWidth: 140, maxWidth: .infinity).accessibilityIdentifier("regionFilterPicker")
-            Button(viewModel.isLoading ? (viewModel.isCancellingSearch ? "Отмена…" : "Отменить") : "Обновить") {
+            VacancyRefreshButton(title: viewModel.isLoading ? (viewModel.isCancellingSearch ? "Отмена…" : "Отменить") : "Обновить") {
                 if viewModel.isLoading { viewModel.cancelSearch() } else { viewModel.startRefresh() }
-            }.buttonStyle(.borderedProminent).frame(width: 120).disabled(viewModel.isCancellingSearch)
+            }.disabled(viewModel.isCancellingSearch)
                 .accessibilityIdentifier("refreshTrudvsemButton")
         }.controlSize(.large).padding(.horizontal, 28).padding(.vertical, 10).background(DeskPalette.toolbar)
     }
