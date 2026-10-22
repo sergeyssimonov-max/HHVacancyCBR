@@ -5,9 +5,12 @@ struct EmployerConfigurationEntry: Codable, Equatable, Identifiable, Sendable {
     let name: String
     let comment: String
     let jointVenture: Bool?
+    var organizationKey: String? = nil
+    var verifiedAt: String? = nil
+    var verificationSource: String? = nil
 
     enum CodingKeys: String, CodingKey {
-        case id, name, comment
+        case id, name, comment, organizationKey, verifiedAt, verificationSource
         case jointVenture = "joint_venture"
     }
 
@@ -16,16 +19,21 @@ struct EmployerConfigurationEntry: Codable, Equatable, Identifiable, Sendable {
         self.name = name
         self.comment = comment
         self.jointVenture = jointVenture
+        if let org = OrganizationRegistry.all.first(where: { $0.hhEmployerIDs.contains(id) }) {
+            organizationKey = org.id
+            verificationSource = "https://hh.ru/employer/" + id
+            verifiedAt = id == "9942121" ? "2026-10-22" : "2026-10-16"
+        }
     }
 }
 
 struct EmployerConfiguration: Codable, Equatable, Sendable {
-    static let currentVersion = 1
+    static let currentVersion = 2
     let version: Int
     let employers: [EmployerConfigurationEntry]
 
     func validated() throws -> EmployerConfiguration {
-        guard version == Self.currentVersion else { throw EmployerConfigurationError.unsupportedVersion(version) }
+        guard (1...Self.currentVersion).contains(version) else { throw EmployerConfigurationError.unsupportedVersion(version) }
         guard !employers.isEmpty else { throw EmployerConfigurationError.empty }
         var ids = Set<String>()
         for employer in employers {
@@ -93,7 +101,26 @@ struct EmployerConfigurationStore: EmployerConfigurationStoring, @unchecked Send
             try data.write(to: fileURL, options: .atomic)
         }
         let current = try JSONDecoder().decode(EmployerConfiguration.self, from: Data(contentsOf: fileURL)).validated()
-        // Runtime configuration belongs exclusively to this application.
-        return current
+        var entries = current.employers
+        let ids = Set(entries.map(\.id))
+        // Add system accounts without replacing user names, comments or additional records.
+        for org in OrganizationRegistry.all {
+            for id in org.hhEmployerIDs where !ids.contains(id) {
+                entries.append(.init(id: id, name: org.name, comment: "Подтверждённый профиль https://hh.ru/employer/\(id). Реестр 2026-10-21. " + org.sources.joined(separator: " ")))
+            }
+        }
+        for index in entries.indices {
+            if let org = OrganizationRegistry.all.first(where: { $0.hhEmployerIDs.contains(entries[index].id) }) {
+                if entries[index].organizationKey == nil { entries[index].organizationKey = org.id }
+                if entries[index].verificationSource == nil { entries[index].verificationSource = "https://hh.ru/employer/" + entries[index].id }
+                if entries[index].verifiedAt == nil { entries[index].verifiedAt = entries[index].id == "9942121" ? "2026-10-22" : "2026-10-16" }
+            }
+        }
+        let migrated = try EmployerConfiguration(version: EmployerConfiguration.currentVersion, employers: entries).validated()
+        if migrated != current {
+            let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(migrated).write(to: fileURL, options: .atomic)
+        }
+        return migrated
     }
 }

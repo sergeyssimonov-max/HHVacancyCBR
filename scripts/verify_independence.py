@@ -23,13 +23,20 @@ def main():
     assert not (ROOT / '.git/objects/info/alternates').exists(), 'Shared Git object storage is not allowed'
     assert not list(APP.glob('employers.legacy-*.json')), 'Legacy employer lists must not ship'
     data = json.loads((APP / 'employers.json').read_text())
-    assert data['version'] == 1
+    assert data['version'] == 2
     ids = [entry['id'] for entry in data['employers']]
-    assert set(ids) == {'47858', '1654251', '125886', '2608647'}, 'Review and document registry changes'
+    assert set(ids) == {'47858', '1654251', '125886', '2608647', '9942121'}, 'Review and document registry changes'
     assert len(ids) == len(set(ids))
     for entry in data['employers']:
         assert entry['name'].strip() and entry['comment'].strip()
         assert f'https://hh.ru/employer/{entry["id"]}' in entry['comment']
+    registry = (APP / 'OrganizationRegistry.swift').read_text()
+    keys = re.findall(r'\.init\(id: "([a-z_]+)", name:', registry)
+    assert keys == ['bank_of_russia', 'rosinkas', 'nspk', 'rnpk', 'nsis', 'uk_fkbs']
+    assert len(keys) == len(set(keys))
+    assert 'hhEmployerIDs: []' in registry
+    for path in APP.glob('*.swift'):
+        assert not re.search(r'Favorite|Favorites|favorite|favorites|Избранное', path.read_text()), path
     project = (PROJECT / 'HHVacancyCBR.xcodeproj/project.pbxproj').read_text()
     assert 'PRODUCT_BUNDLE_IDENTIFIER = local.sergey.HHVacancyCBR;' in project
     assert 'path = "ЦБВакансии.app";' in project

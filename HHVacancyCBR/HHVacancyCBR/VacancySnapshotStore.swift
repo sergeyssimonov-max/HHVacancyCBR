@@ -5,6 +5,7 @@ struct VacancySnapshot: Codable, Sendable {
     struct Entry: Codable, Sendable {
         let summary: HHVacancySummary
         let location: VacancyLocation
+        var details: HHVacancyDetails? = nil
     }
 
     let version: Int
@@ -14,13 +15,13 @@ struct VacancySnapshot: Codable, Sendable {
 
     init(values: [VacancySearchResult], issues: [VacancyCollectionIssue], updatedAt: Date) {
         version = 1
-        vacancies = values.map { Entry(summary: $0.summary, location: $0.location) }
+        vacancies = values.map { Entry(summary: $0.summary, location: $0.location, details: $0.isDetailLoaded ? $0.details : nil) }
         self.issues = issues
         self.updatedAt = updatedAt
     }
 
     var results: [VacancySearchResult] {
-        vacancies.map { VacancySearchResult(summary: $0.summary, location: $0.location) }
+        vacancies.map { VacancySearchResult(id: $0.summary.id, summary: $0.summary, details: $0.details ?? VacancySearchResult(summary: $0.summary, location: $0.location).details, location: $0.location, isDetailLoaded: $0.details != nil) }
     }
 }
 

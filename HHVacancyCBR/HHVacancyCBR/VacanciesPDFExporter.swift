@@ -27,12 +27,12 @@ enum VacancyPDFDefaults {
         )
     }
 
-    static func favoritesFileName(
+    static func bulkFileName(
         part: Int,
         totalParts: Int,
         exportStartedAt: Date = Date()
     ) -> String {
-        PDFFileNameBuilder.favorites(
+        PDFFileNameBuilder.bulk(
             part: part,
             totalParts: totalParts,
             exportStartedAt: exportStartedAt
@@ -40,7 +40,7 @@ enum VacancyPDFDefaults {
     }
 }
 
-/// Shared monochrome typography for personal, favorites and statistical PDFs.
+/// Shared monochrome typography for personal, bulk and statistical PDFs.
 /// Fonts/colors are computed to avoid sharing non-Sendable AppKit objects.
 enum VacancyPDFStyle {
     static func font(ofSize size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
@@ -107,13 +107,13 @@ enum PDFFileNameBuilder {
         )
     }
 
-    static func favorites(part: Int, totalParts: Int, exportStartedAt: Date) -> String {
-        let stem = "цбвакансии_\(timestamp(exportStartedAt))_избранные_вакансии"
-        guard totalParts > 1 else { return fileName(base: stem, fallback: "избранные_вакансии") }
+    static func bulk(part: Int, totalParts: Int, exportStartedAt: Date, source: VacancySource = .hh) -> String {
+        let stem = "цбвакансии_\(timestamp(exportStartedAt))_\(source.rawValue)_все_вакансии"
+        guard totalParts > 1 else { return fileName(base: stem, fallback: "все_вакансии") }
         return fileName(
             base: stem,
             semanticSuffix: "том_\(String(format: "%03d", part))_из_\(String(format: "%03d", totalParts))",
-            fallback: "избранные_вакансии"
+            fallback: "все_вакансии"
         )
     }
 
@@ -591,7 +591,7 @@ final class VacancyPDFDocumentBuilder {
 
     func documentHeader(_ context: DocumentContext) {
         title(context.kind)
-        field("Источник", "HeadHunter (hh.ru)")
+        field("Источник", context.source.displayName)
         for key in context.filters.keys.sorted() { field(key, context.filters[key]) }
         if context.vacancyIDs.count > 1 { field("Количество вакансий", String(Set(context.vacancyIDs).count)) }
     }
@@ -606,9 +606,12 @@ final class VacancyPDFDocumentBuilder {
         let blockStart = document.length
         section("Проверка исходных данных")
         field("Хеш-функция", MaterialHash.displayName)
-        provenance("Хеш рассчитан по исходным байтам ответа hh.ru, приложенного к PDF. Совпадение хеша при повторном расчёте подтверждает неизменность сохранённого ответа.")
+        provenance("Хеш рассчитан по исходным байтам ответа API, приложенного к PDF. Совпадение хеша при повторном расчёте подтверждает неизменность сохранённого ответа.")
         for (index, record) in records.enumerated() {
-            field("Ответ hh.ru №\(index + 1)", record.endpoint + " · сохранён " + VacancyPDFStyle.utcDate(record.receivedAt))
+            field("Ответ API №\(index + 1)", record.endpoint + " · сохранён " + VacancyPDFStyle.utcDate(record.receivedAt))
+            field("Запрос", record.method + " · " + record.parameters.keys.sorted().map { "\($0)=\(record.parameters[$0]!)" }.joined(separator: "&"))
+            field("Отправлен", VacancyPDFStyle.utcDate(record.sentAt))
+            field("HTTP / байт", "\(record.httpStatus) / \(record.byteCount)")
             hashField("Хеш ответа №\(index + 1)", record.hash)
         }
         if records.count <= 3 {
@@ -1058,27 +1061,26 @@ enum VacancyHTMLAttributedText {
     }
 }
 
-struct FavoritePDFExportProgress: Equatable {
+struct BulkPDFExportProgress: Equatable {
     let completedVacancies: Int
     let totalVacancies: Int
+    var stage = "Подготовка вакансий"
 }
 
 /// A vacancy frozen for background rendering, with its HTML description already
 /// imported on the main actor. The attributed string is not mutated after creation.
 struct PDFVacancySnapshot: @unchecked Sendable {
-    let value: VacancySearchResult
     let context: DocumentContext
-    let importedDescription: NSAttributedString?
+    let attributedDocument: NSAttributedString
 
     @MainActor
     init(value: VacancySearchResult) {
-        self.value = value
         context = DocumentContext.vacancy(value)
-        importedDescription = VacancyPDFFormatter.importedDescription(for: value)
+        attributedDocument = VacancyPDFFormatter.attributedDocument(for: value,
+            importedDescription: VacancyPDFFormatter.importedDescription(for: value), context: context)
     }
-
-    var attributedDocument: NSAttributedString {
-        VacancyPDFFormatter.attributedDocument(for: value, importedDescription: importedDescription, context: context)
+    init(context: DocumentContext, document: NSAttributedString) {
+        self.context = context; attributedDocument = document.copy() as! NSAttributedString
     }
 }
 
@@ -1112,17 +1114,20 @@ struct PDFVacanciesSnapshot: @unchecked Sendable {
     }
 }
 
-enum FavoritePDFExportOutcome: Equatable {
+enum BulkPDFExportOutcome: Equatable {
     case cancelled
     case exported(fileCount: Int, pageCount: Int)
 }
 
 @MainActor
-protocol FavoriteVacanciesPDFExporting {
-    func export(
-        vacancies: [VacancySearchResult],
-        progress: @escaping @MainActor @Sendable (FavoritePDFExportProgress) -> Void
-    ) async throws -> FavoritePDFExportOutcome
+protocol VacanciesPDFExporting {
+    func export(vacancies: [VacancySearchResult], progress: @escaping @MainActor @Sendable (BulkPDFExportProgress) -> Void) async throws -> BulkPDFExportOutcome
+    func export(vacancies: [VacancySearchResult], filters: [String: String], progress: @escaping @MainActor @Sendable (BulkPDFExportProgress) -> Void) async throws -> BulkPDFExportOutcome
+}
+extension VacanciesPDFExporting {
+    func export(vacancies: [VacancySearchResult], filters: [String: String], progress: @escaping @MainActor @Sendable (BulkPDFExportProgress) -> Void) async throws -> BulkPDFExportOutcome {
+        try await export(vacancies: vacancies, progress: progress)
+    }
 }
 
 /// Writes new files and never replaces one: each name, or its first free `_N` variant,
@@ -1168,13 +1173,30 @@ enum PDFNewFileWriter {
         maximumCandidates: Int = 10_000,
         beforeEachFile: (Int) throws -> Void = { _ in }
     ) throws -> [URL] {
-        guard contents.count == names.count else { throw FavoriteVacanciesPDFExporter.ExportError.missingPreparedExport }
+        guard contents.count == names.count else { throw VacanciesPDFExporter.ExportError.missingPreparedExport }
         var written: [CreatedFile] = []
         do {
             for (index, (data, name)) in zip(contents, names).enumerated() {
                 try Task.checkCancellation()
                 try beforeEachFile(index)
                 written.append(try writeNewFile(data, name: name, in: directory, maximumCandidates: maximumCandidates))
+            }
+            try Task.checkCancellation()
+            return written.map(\.url)
+        } catch {
+            for file in written { file.removeIfStillOwned() }
+            throw error
+        }
+    }
+
+    static func writeFiles(_ files: [URL], names: [String], in directory: URL) throws -> [URL] {
+        guard files.count == names.count else { throw VacanciesPDFExporter.ExportError.missingPreparedExport }
+        var written: [CreatedFile] = []
+        do {
+            for (file, name) in zip(files, names) {
+                try Task.checkCancellation()
+                let data = try Data(contentsOf: file, options: .mappedIfSafe)
+                written.append(try writeNewFile(data, name: name, in: directory, maximumCandidates: 10_000))
             }
             try Task.checkCancellation()
             return written.map(\.url)
@@ -1217,18 +1239,20 @@ enum PDFNewFileWriter {
             }
             return created
         }
-        throw FavoriteVacanciesPDFExporter.ExportError.noAvailableFileName
+        throw VacanciesPDFExporter.ExportError.noAvailableFileName
     }
 }
 
 actor PDFExportWorker {
     private struct PreparedPart: Sendable {
-        let data: Data
+        let file: URL
         let pageCount: Int
         let context: DocumentContext
     }
 
     private var preparedParts: [PreparedPart]?
+    private var stagingDirectory: URL?
+    deinit { if let stagingDirectory { try? FileManager.default.removeItem(at: stagingDirectory) } }
 
     struct PreparedExport: Sendable {
         let partCount: Int
@@ -1239,65 +1263,101 @@ actor PDFExportWorker {
 
     func prepare(
         vacancies: PDFVacanciesSnapshot,
-        progress: @escaping @MainActor @Sendable (FavoritePDFExportProgress) -> Void
+        filters: [String: String] = [:],
+        progress: @escaping @MainActor @Sendable (BulkPDFExportProgress) -> Void
     ) async throws -> PreparedExport {
-        preparedParts = nil
+        discardPreparedExport()
+        let staging = FileManager.default.temporaryDirectory.appendingPathComponent("VacancyPDF-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        stagingDirectory = staging
+        var succeeded = false
+        defer { if !succeeded { discardPreparedExport() } }
         try Task.checkCancellation()
-        var parts: [PreparedPart] = []
-        var current: [PDFVacancySnapshot] = []
-        var count = 1 // Every registry part starts with a document header.
-        var totalPages = 0
+        struct Chunk {
+            var pages: [VacanciesPDFExporter.Page]
+            var contexts: [DocumentContext]
+        }
+        let started = PDFSourceJSON.timestamp(Date())
+        var chunks: [Chunk] = []
+        var current = Chunk(pages: [], contexts: [])
+        func context(_ contexts: [DocumentContext]) -> DocumentContext {
+            DocumentContext(kind: "Все вакансии", vacancyIDs: Array(Set(contexts.flatMap(\.vacancyIDs))).sorted(),
+                observationIDs: contexts.flatMap(\.observationIDs), filters: filters,
+                source: contexts.first?.source ?? .hh)
+        }
+        func header(_ c: DocumentContext, part: Int, total: Int, continuation: Bool) -> [VacanciesPDFExporter.Page] {
+            let builder = VacancyPDFDocumentBuilder()
+            builder.documentHeader(c)
+            builder.field("Сформирован", VacancyPDFStyle.utcDate(started))
+            builder.field("Часть", "\(part) из \(total)")
+            if continuation { builder.field("Продолжение", "Полная карточка вакансии продолжается с предыдущей части") }
+            builder.sourceEvidence(c)
+            builder.identify(c)
+            return VacanciesPDFExporter.pages(for: builder.document)
+        }
+        let limit = VacanciesPDFExporter.maximumPagesPerFile
         for (index, vacancy) in vacancies.values.enumerated() {
             try Task.checkCancellation()
-            let estimate = FavoriteVacanciesPDFExporter.pages(for: vacancy.attributedDocument).count
-            if !current.isEmpty && count + estimate > FavoriteVacanciesPDFExporter.maximumPagesPerFile {
-                let part = try prepareRegistry(current); parts.append(part); totalPages += part.pageCount
-                current = []; count = 1
+            var pages = VacanciesPDFExporter.pages(for: vacancy.attributedDocument)
+            let candidateContexts = current.contexts + [vacancy.context]
+            let overhead = header(context(candidateContexts), part: 999999, total: 999999, continuation: true).count
+            if !current.pages.isEmpty && current.pages.count + pages.count + overhead > limit {
+                chunks.append(current); current = Chunk(pages: [], contexts: [])
             }
-            current.append(vacancy); count += estimate
+            while !pages.isEmpty {
+                try Task.checkCancellation()
+                let contexts = current.contexts + [vacancy.context]
+                let capacity = limit - header(context(contexts), part: 999999, total: 999999, continuation: true).count - current.pages.count
+                guard capacity > 0 else { throw PDFSourceError.invalid("Реквизиты источников превышают лимит части") }
+                let count = min(capacity, pages.count)
+                current.pages += pages.prefix(count); current.contexts = contexts
+                pages.removeFirst(count)
+                if !pages.isEmpty { chunks.append(current); current = Chunk(pages: [], contexts: []) }
+            }
             await progress(.init(completedVacancies: index + 1, totalVacancies: vacancies.values.count))
         }
-        if !current.isEmpty { let part = try prepareRegistry(current); parts.append(part); totalPages += part.pageCount }
+        if !current.pages.isEmpty { chunks.append(current) }
+        var parts: [PreparedPart] = []
+        var previousIDs = Set<String>()
+        for (index, chunk) in chunks.enumerated() {
+            try Task.checkCancellation()
+            await progress(.init(completedVacancies: vacancies.values.count, totalVacancies: vacancies.values.count,
+                                 stage: "Формирование части \(index + 1) из \(chunks.count)"))
+            let c = context(chunk.contexts)
+            let continuation = !previousIDs.isDisjoint(with: c.vacancyIDs)
+            let pages = header(c, part: index + 1, total: chunks.count, continuation: continuation) + chunk.pages
+            guard pages.count <= limit else { throw PDFSourceError.invalid("Превышен лимит страниц") }
+            let rendered = try documentedData(pages: pages, context: c)
+            let file = staging.appendingPathComponent("part-\(index).pdf")
+            try rendered.data.write(to: file, options: .atomic)
+            parts.append(.init(file: file, pageCount: rendered.count, context: c))
+            previousIDs = Set(c.vacancyIDs)
+        }
         preparedParts = parts
-        return PreparedExport(
-            partCount: parts.count,
-            pageCount: totalPages
-        )
+        succeeded = true
+        return PreparedExport(partCount: parts.count, pageCount: parts.reduce(0) { $0 + $1.pageCount })
     }
 
     func discardPreparedExport() {
         preparedParts = nil
+        if let stagingDirectory { try? FileManager.default.removeItem(at: stagingDirectory) }
+        stagingDirectory = nil
     }
 
-    private func prepareRegistry(_ values: [PDFVacancySnapshot]) throws -> PreparedPart {
-        let context = DocumentContext(kind: "Реестр вакансий",
-            vacancyIDs: values.map { $0.value.id }, observationIDs: values.flatMap { $0.value.observationIDs }, filters: ["Список": "Избранное"])
-        let cover = VacancyPDFDocumentBuilder()
-        cover.documentHeader(context)
-        cover.field("Количество вакансий", String(values.count))
-        cover.identificationNote()
-        cover.identify(context)
-        var pages = FavoriteVacanciesPDFExporter.pages(for: cover.document)
-        pages += values.flatMap { snapshot in
-            FavoriteVacanciesPDFExporter.pages(for: VacancyPDFFormatter.attributedDocument(for: snapshot.value, importedDescription: snapshot.importedDescription, context: context))
-        }
-        let sources = VacancyPDFDocumentBuilder()
-        sources.sourceEvidence(context)
-        if sources.document.length > 0 {
-            sources.identify(context)
-            pages += FavoriteVacanciesPDFExporter.pages(for: sources.document)
-        }
+    func exportDocument(document: PDFVacancySnapshot, destination: URL) throws {
         try Task.checkCancellation()
-        let rendered = try documentedData(pages: pages, context: context)
-        return PreparedPart(data: rendered.data, pageCount: rendered.count, context: context)
+        let pages = VacanciesPDFExporter.pages(for: document.attributedDocument)
+        let data = try documentedData(pages: pages, context: document.context).data
+        try Task.checkCancellation()
+        _ = try PDFNewFileWriter.write([data], names: [destination.lastPathComponent], in: destination.deletingLastPathComponent())
     }
 
-    private func documentedData(pages: [FavoriteVacanciesPDFExporter.Page], context: DocumentContext,
+    private func documentedData(pages: [VacanciesPDFExporter.Page], context: DocumentContext,
                                 didRenderPage: (@Sendable (Int) -> Void)? = nil) throws -> (data: Data, count: Int) {
         let materials = try PDFSourceEvidence.shared.materials(for: context)
-        let rendered = try FavoriteVacanciesPDFExporter.pdfData(for: pages, didRenderPage: didRenderPage)
+        let rendered = try VacanciesPDFExporter.pdfData(for: pages, didRenderPage: didRenderPage)
         let data = try PDFOriginalMaterials.embed(materials, in: rendered)
-        try FavoriteVacanciesPDFExporter.validatePDF(data: data, expectedPages: pages.count)
+        try VacanciesPDFExporter.validatePDF(data: data, expectedPages: pages.count)
         return (data, pages.count)
     }
 
@@ -1308,36 +1368,36 @@ actor PDFExportWorker {
     ) throws {
         try Task.checkCancellation()
         let pages = autoreleasepool {
-            FavoriteVacanciesPDFExporter.pages(for: vacancy.attributedDocument)
+            VacanciesPDFExporter.pages(for: vacancy.attributedDocument)
         }
         try Task.checkCancellation()
         let data = try documentedData(pages: pages, context: vacancy.context, didRenderPage: didRenderPage).data
         try Task.checkCancellation()
-        try data.write(to: destination, options: .atomic)
+        _ = try PDFNewFileWriter.write([data], names: [destination.lastPathComponent], in: destination.deletingLastPathComponent())
     }
 
     func exportStatistics(report: VacancyStatisticsReport, destination: URL) throws {
         try Task.checkCancellation()
         let pages = try autoreleasepool {
-            try FavoriteVacanciesPDFExporter.pages(for: report.attributedDocument())
+            try VacanciesPDFExporter.pages(for: report.attributedDocument())
         }
         let data = try documentedData(pages: pages, context: report.documentContext).data
         try Task.checkCancellation()
-        try data.write(to: destination, options: .atomic)
+        _ = try PDFNewFileWriter.write([data], names: [destination.lastPathComponent], in: destination.deletingLastPathComponent())
     }
 
     /// Writes the prepared parts as new files; see PDFNewFileWriter.
     func writePrepared(names: [String], directory: URL) throws -> [URL] {
         guard let parts = preparedParts else {
-            throw FavoriteVacanciesPDFExporter.ExportError.missingPreparedExport
+            throw VacanciesPDFExporter.ExportError.missingPreparedExport
         }
-        preparedParts = nil
-        return try PDFNewFileWriter.write(parts.map(\.data), names: names, in: directory)
+        defer { discardPreparedExport() }
+        return try PDFNewFileWriter.writeFiles(parts.map(\.file), names: names, in: directory)
     }
 }
 
 @MainActor
-final class FavoriteVacanciesPDFExporter: FavoriteVacanciesPDFExporting {
+final class VacanciesPDFExporter: VacanciesPDFExporting {
     nonisolated static let maximumPagesPerFile = 100
 
     struct Page: @unchecked Sendable {
@@ -1367,19 +1427,24 @@ final class FavoriteVacanciesPDFExporter: FavoriteVacanciesPDFExporting {
         chooseDirectory: (() -> URL?)? = nil,
         now: @escaping () -> Date = Date.init
     ) {
-        self.chooseDirectory = chooseDirectory ?? { FavoriteVacanciesPDFExporter.chooseExportDirectory() }
+        self.chooseDirectory = chooseDirectory ?? { VacanciesPDFExporter.chooseExportDirectory() }
         self.now = now
+    }
+
+    func export(vacancies: [VacancySearchResult], progress: @escaping @MainActor @Sendable (BulkPDFExportProgress) -> Void) async throws -> BulkPDFExportOutcome {
+        try await export(vacancies: vacancies, filters: [:], progress: progress)
     }
 
     func export(
         vacancies: [VacancySearchResult],
-        progress: @escaping @MainActor @Sendable (FavoritePDFExportProgress) -> Void
-    ) async throws -> FavoritePDFExportOutcome {
+        filters: [String: String],
+        progress: @escaping @MainActor @Sendable (BulkPDFExportProgress) -> Void
+    ) async throws -> BulkPDFExportOutcome {
         let exportStartedAt = now()
         do {
             let prepared = try await worker.prepare(
                 vacancies: try await PDFVacanciesSnapshot.make(values: vacancies),
-                progress: progress
+                filters: filters, progress: progress
             )
             guard let directory = chooseDirectory() else {
                 await worker.discardPreparedExport()
@@ -1389,6 +1454,7 @@ final class FavoriteVacanciesPDFExporter: FavoriteVacanciesPDFExporting {
             let names = (0..<prepared.partCount).map {
                 Self.fileName(part: $0 + 1, totalParts: prepared.partCount, exportStartedAt: exportStartedAt)
             }
+            progress(.init(completedVacancies: vacancies.count, totalVacancies: vacancies.count, stage: "Сохранение файлов"))
             let destinations = try await worker.writePrepared(names: names, directory: directory)
             return .exported(fileCount: destinations.count, pageCount: prepared.pageCount)
         } catch {
@@ -1416,7 +1482,7 @@ final class FavoriteVacanciesPDFExporter: FavoriteVacanciesPDFExporting {
         totalParts: Int,
         exportStartedAt: Date = Date()
     ) -> String {
-        VacancyPDFDefaults.favoritesFileName(
+        VacancyPDFDefaults.bulkFileName(
             part: part,
             totalParts: totalParts,
             exportStartedAt: exportStartedAt

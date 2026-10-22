@@ -1,25 +1,45 @@
 {
-  "version": 1,
+  "version": 2,
   "employers": [
     {
       "id": "47858",
       "name": "Банк России",
-      "comment": "Центральный банк Российской Федерации. Профиль HH прямо идентифицирует Банк России и ссылается на cbr.ru. Источник: https://www.cbr.ru/about_br/career/ HH: https://hh.ru/employer/47858 Сверка: 2026-10-16."
+      "comment": "Центральный банк Российской Федерации. Профиль HH прямо идентифицирует Банк России и ссылается на cbr.ru. Источник: https://www.cbr.ru/about_br/career/ HH: https://hh.ru/employer/47858 Сверка: 2026-10-16.",
+      "organizationKey": "bank_of_russia",
+      "verificationSource": "https://hh.ru/employer/47858",
+      "verifiedAt": "2026-10-16"
     },
     {
       "id": "1654251",
       "name": "НСПК",
-      "comment": "АО «Национальная система платежных карт». Банк России указывает принадлежность ему 100% акций НСПК. Источник: https://www.cbr.ru/about_br/history/ HH: https://hh.ru/employer/1654251 Сверка: 2026-10-16."
+      "comment": "АО «Национальная система платежных карт». Банк России указывает принадлежность ему 100% акций НСПК. Источник: https://www.cbr.ru/about_br/history/ HH: https://hh.ru/employer/1654251 Сверка: 2026-10-16.",
+      "organizationKey": "nspk",
+      "verificationSource": "https://hh.ru/employer/1654251",
+      "verifiedAt": "2026-10-16"
     },
     {
       "id": "125886",
       "name": "Объединение РОСИНКАС",
-      "comment": "Российское объединение инкассации входит в единую централизованную систему Банка России; подтверждено официальным сайтом и профилем HH. Источник: https://www.rosinkas.ru/info HH: https://hh.ru/employer/125886 Сверка: 2026-10-16."
+      "comment": "Российское объединение инкассации входит в единую централизованную систему Банка России; подтверждено официальным сайтом и профилем HH. Источник: https://www.rosinkas.ru/info HH: https://hh.ru/employer/125886 Сверка: 2026-10-16.",
+      "organizationKey": "rosinkas",
+      "verificationSource": "https://hh.ru/employer/125886",
+      "verifiedAt": "2026-10-16"
     },
     {
       "id": "2608647",
       "name": "РНПК",
-      "comment": "АО «Российская Национальная Перестраховочная Компания». Профиль работодателя указывает учреждение Банком России и принадлежность ему 100% акций. Источник: https://www.cbr.ru/Queries/XsltBlock/File/103662?fileId=9886 HH: https://hh.ru/employer/2608647 Сверка: 2026-10-16."
+      "comment": "АО «Российская Национальная Перестраховочная Компания». Профиль работодателя указывает учреждение Банком России и принадлежность ему 100% акций. Источник: https://www.cbr.ru/Queries/XsltBlock/File/103662?fileId=9886 HH: https://hh.ru/employer/2608647 Сверка: 2026-10-16.",
+      "organizationKey": "rnpk",
+      "verificationSource": "https://hh.ru/employer/2608647",
+      "verifiedAt": "2026-10-16"
+    },
+    {
+      "id": "9942121",
+      "name": "НСИС",
+      "comment": "АО «НСИС». Банк России — единственный акционер. https://www.cbr.ru/press/event/?id=14592 https://nsis.ru/ https://hh.ru/employer/9942121 Подтверждено заданием 2026-10-21.",
+      "organizationKey": "nsis",
+      "verificationSource": "https://hh.ru/employer/9942121",
+      "verifiedAt": "2026-10-22"
     }
   ]
 }

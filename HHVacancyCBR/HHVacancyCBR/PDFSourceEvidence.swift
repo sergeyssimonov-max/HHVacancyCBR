@@ -36,6 +36,8 @@ enum PDFSourceJSON {
 }
 
 struct APIObservation: Codable, Identifiable, Sendable {
+    var source: VacancySource? = nil
+    var resolvedSource: VacancySource { source ?? .hh }
     let version: Int
     let id: String
     let endpoint: String
@@ -51,11 +53,13 @@ struct APIObservation: Codable, Identifiable, Sendable {
 }
 
 struct DocumentContext: Sendable {
+    let source: VacancySource
     let kind: String
     let filters: [String: String]
     let vacancyIDs: [String]
     let observationIDs: [String]
-    init(kind: String, vacancyIDs: [String], observationIDs: [String] = [], filters: [String: String] = [:]) {
+    init(kind: String, vacancyIDs: [String], observationIDs: [String] = [], filters: [String: String] = [:], source: VacancySource = .hh) {
+        self.source = source
         self.kind = kind
         self.filters = filters; self.vacancyIDs = vacancyIDs
         self.observationIDs = Array(Set(observationIDs)).sorted()
@@ -69,7 +73,7 @@ extension DocumentContext {
 }
 
 /// Append-only directories. A complete transaction becomes visible only after rename.
-/// Legacy favorites/snapshots remain untouched and are never fabricated as raw responses.
+/// Legacy snapshots remain untouched and are never fabricated as raw responses.
 final class PDFSourceEvidence: @unchecked Sendable {
     static let shared = PDFSourceEvidence()
     private let configuredRoot: URL?
@@ -108,7 +112,10 @@ final class PDFSourceEvidence: @unchecked Sendable {
     @discardableResult
     func capture(data: Data, url: URL, status: Int, sent: Date, received: Date) throws -> APIObservation? {
         lock.lock(); defer { lock.unlock() }
-        guard url.host == "api.hh.ru", url.path == "/vacancies" || url.path.hasPrefix("/vacancies/") else { return nil }
+        let source: VacancySource
+        if url.host == "api.hh.ru", url.path == "/vacancies" || url.path.hasPrefix("/vacancies/") { source = .hh }
+        else if url.host == "opendata.trudvsem.ru", url.path.hasPrefix("/api/v1/vacancies/") { source = .trudvsem }
+        else { return nil }
         guard (200...299).contains(status) else { return nil }
         let object = try JSONSerialization.jsonObject(with: data)
         func secret(_ object: Any) -> Bool {
@@ -121,13 +128,21 @@ final class PDFSourceEvidence: @unchecked Sendable {
         }
         guard !secret(object) else { throw PDFSourceError.invalid("Ответ содержит секретное поле") }
         let dict = object as? [String: Any] ?? [:]
-        let ids = (dict["items"] as? [[String: Any]])?.compactMap { $0["id"] as? String } ?? (dict["id"] as? String).map { [$0] } ?? []
-        let allowed = Set(["employer_id", "area", "page", "per_page", "text", "order_by", "date_from", "date_to", "experience", "work_format", "schedule"])
+        var ids = (dict["items"] as? [[String: Any]])?.compactMap { $0["id"] as? String } ?? (dict["id"] as? String).map { [$0] } ?? []
+        if source == .trudvsem {
+            let entries = (dict["results"] as? [String: Any])?["vacancies"] as? [[String: Any]] ?? []
+            ids = entries.compactMap { wrapper in
+                guard let v = wrapper["vacancy"] as? [String: Any], let id = v["id"] as? String,
+                      let company = v["company"] as? [String: Any], let code = company["companycode"] as? String else { return nil }
+                return "trudvsem.ru:\(code):\(id)"
+            }
+        }
+        let allowed = Set(["employer_id", "area", "page", "per_page", "text", "order_by", "date_from", "date_to", "experience", "work_format", "schedule", "limit", "offset", "modifiedFrom", "modifiedTo"])
         var parameters: [String: String] = [:]
         for item in URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? [] where allowed.contains(item.name) { parameters[item.name] = item.value ?? "" }
-        let observation = APIObservation(version: 1, id: UUID().uuidString.lowercased(), endpoint: "https://api.hh.ru" + url.path,
+        let observation = APIObservation(source: source, version: 1, id: UUID().uuidString.lowercased(), endpoint: "https://" + (url.host ?? "") + url.path,
             parameters: parameters, sentAt: PDFSourceJSON.timestamp(sent), receivedAt: PDFSourceJSON.timestamp(received), httpStatus: status,
-            vacancyIDs: ids, algorithm: MaterialHash.algorithm, hash: try MaterialHash.digest(data), byteCount: data.count, method: "GET · HeadHunter API · URLSession")
+            vacancyIDs: ids, algorithm: MaterialHash.algorithm, hash: try MaterialHash.digest(data), byteCount: data.count, method: "GET")
         _ = try transaction(parent: directory("observations"), id: observation.id) { folder in
             try data.write(to: folder.appendingPathComponent("response.json"), options: .withoutOverwriting)
             try PDFSourceJSON.encode(observation).write(to: folder.appendingPathComponent("observation.json"), options: .withoutOverwriting)
@@ -152,13 +167,21 @@ final class PDFSourceEvidence: @unchecked Sendable {
     func materials(for context: DocumentContext) throws -> [Material] {
         lock.lock(); defer { lock.unlock() }
         var result: [Material] = []
+        var covered = Set<String>()
+        var hashes = Set<String>()
         for (index, id) in context.observationIDs.enumerated() {
             let record = try observation(id)
+            guard record.resolvedSource == context.source else { throw PDFSourceError.invalid("Подмена источника") }
+            covered.formUnion(record.vacancyIDs)
             guard !Set(record.vacancyIDs).isDisjoint(with: context.vacancyIDs) else { throw PDFSourceError.invalid("Несвязанный материал") }
+            guard hashes.insert(record.hash).inserted else { continue }
             let source = try directory("observations").appendingPathComponent(id)
             result.append(Material(path: String(format: "sources/response-%03d.json", index + 1),
                                    data: try Data(contentsOf: source.appendingPathComponent("response.json")),
                                    type: "api-response", observationIDs: [id]))
+        }
+        guard Set(context.vacancyIDs).isSubset(of: covered), !context.vacancyIDs.isEmpty else {
+            throw PDFSourceError.invalid("Для части вакансий отсутствуют исходные ответы API. Обновите источник.")
         }
         return result
     }

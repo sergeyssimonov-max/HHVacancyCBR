@@ -15,6 +15,16 @@ struct HHVacancyCBRApp: App {
 
 @MainActor
 enum AppComposition {
+    static func makeTrudvsemViewModel(environment: [String: String] = ProcessInfo.processInfo.environment) -> TrudvsemViewModel {
+#if DEBUG
+        if environment["HHVACANCYCBR_UI_TEST_MODE"] == "1" {
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("HHVacancyCBR-UI-TV-" + UUID().uuidString).appendingPathComponent("vacancies-trudvsem.json")
+            return TrudvsemViewModel(client: UITestTrudClient(), store: .init(configuredURL: url))
+        }
+#endif
+        return TrudvsemViewModel()
+    }
+
     static func makeViewModel(environment: [String: String] = ProcessInfo.processInfo.environment) -> VacancySearchViewModel {
 #if DEBUG
         if environment["HHVACANCYCBR_UI_TEST_MODE"] == "1" {
@@ -25,7 +35,6 @@ enum AppComposition {
         return VacancySearchViewModel(
             apiClient: HHAPIClient(),
             employerStore: EmployerConfigurationStore(bundledDefaultURL: defaultURL),
-            favoritesStore: FavoriteVacancyStore(),
             snapshotStore: VacancySnapshotStore()
         )
     }
@@ -62,10 +71,9 @@ private struct UITestAPIClient: HHVacancyAPIClient {
     }
     func searchVacancies(_ request: HHVacancySearchRequest) async throws -> HHVacancySearchResponse {
         if scenario == "searchError" { throw HHAPIError.requestFailed(statusCode: 503, message: "test") }
-        // "slowSearch" hangs every search; "slowRefresh" answers the first search (one request per
-        // employer) and hangs later ones, so a test can cancel a refresh over existing results.
+        // "slowSearch" hangs every search; "slowRefresh" answers the first search (including the supplemental field-institution request) and hangs later ones, so a test can cancel a refresh over existing results.
         let searchNumber = await searches.next()
-        if scenario == "slowSearch" || (scenario == "slowRefresh" && searchNumber > 2) {
+        if scenario == "slowSearch" || (scenario == "slowRefresh" && searchNumber > 3) {
             try await Task.sleep(nanoseconds: 120_000_000_000)
         }
         if scenario == "partial", request.employerID == "1654251" {
@@ -120,9 +128,21 @@ private extension AppComposition {
             apiClient: UITestAPIClient(scenario: scenario),
             employerStore: UITestEmployerStore(),
             areaStore: AreaDirectoryStore(fileURL: cacheURL),
-            favoritesStore: InMemoryFavoriteVacancyStore(),
             currentDate: { Date(timeIntervalSince1970: 1_788_200_000) }
         )
+    }
+}
+#endif
+
+#if DEBUG
+private struct UITestTrudClient: TrudvsemAPI {
+    func vacancies(inn: String, page: Int, limit: Int) async throws -> TrudvsemPage {
+        let rows: [[String: Any]] = inn == "7720895647" ? [["vacancy": [
+            "id": "ui-tv-1", "job-name": "Администратор баз данных",
+            "company": ["inn": inn, "ogrn": "1237700279508", "companycode": "ui-company", "name": "НСИС"],
+            "region": ["region_code": "77", "name": "Москва"], "duty": "Описание вакансии trudvsem.ru"
+        ]]] : []
+        return try TrudvsemPage(data: JSONSerialization.data(withJSONObject: ["status": "200", "meta": ["total": rows.count], "results": ["vacancies": rows]]))
     }
 }
 #endif

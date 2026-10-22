@@ -910,6 +910,13 @@ enum FieldInstitutionClassifier {
         let workplaceFields = [details?.name ?? summary.name, details?.department?.name ?? summary.department?.name]
         let descriptions = [summary.snippet?.plainText, details?.description?.readableHTMLText,
                             details?.brandedDescription?.readableHTMLText, details?.address?.description]
+        return classifyWorkplace(eligible: true, workplaceFields: workplaceFields, descriptions: descriptions,
+                                 provenance: "hh.ru, аккаунт 47858", registry: registry)
+    }
+
+    static func classifyWorkplace(eligible: Bool, workplaceFields: [String?], descriptions: [String?],
+                                  provenance: String, registry: [FieldInstitutionRegistryEntry] = registry) -> FieldInstitutionClassification {
+        guard eligible else { return .unidentified }
         for (text, requiresWorkplace) in workplaceFields.map({ ($0, false) }) + descriptions.map({ ($0, true) }) {
             guard let text else { continue }
             for sentence in text.components(separatedBy: CharacterSet(charactersIn: ".!;\n")) {
@@ -922,13 +929,13 @@ enum FieldInstitutionClassifier {
                    !matches(#"департамент.{0,12}полевых учреждений"#, value),
                    (matches(#"банк[а]? россии|центрального банка|цб рф"#, value)
                     || !requiresWorkplace || matches(#"(?:работа|работать|служба|место работы).{0,40}в полев"#, value)) {
-                    return .init(isMember: true, reason: "Место работы в аккаунте 47858: \(sentence.trimmingCharacters(in: .whitespaces))")
+                    return .init(isMember: true, reason: "Место работы (\(provenance)): \(sentence.trimmingCharacters(in: .whitespaces))")
                 }
                 for entry in registry where !entry.source.isEmpty {
                     for alias in entry.aliases {
                         let escaped = NSRegularExpression.escapedPattern(for: alias.lowercased())
                         if matches(#"(?:\bпу\s*[«\"]?|\bучреждени[еяи]\s*[«\"]?)"# + #"(?:№\s*)?"# + escaped + #"(?![\w-])"#, value) {
-                            return .init(isMember: true, reason: "Подтверждённое наименование \(alias), аккаунт 47858: \(entry.source)")
+                            return .init(isMember: true, reason: "Подтверждённое наименование \(alias), \(provenance): \(entry.source)")
                         }
                     }
                 }

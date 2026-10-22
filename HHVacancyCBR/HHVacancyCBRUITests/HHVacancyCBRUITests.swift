@@ -9,16 +9,25 @@ final class HHVacancyCBRUITests: XCTestCase {
         return app
     }
 
-    func testFavoritesHasNoHistoryOrRefreshAction() {
+    func testSourcesHaveIndependentRefreshAndPreserveHHRows() {
         let app = launch()
-        XCTAssertFalse(app.buttons["История и архив"].exists)
-        XCTAssertTrue(app.buttons["searchVacanciesButton"].exists)
-        let favoriteMode = app.radioButtons.matching(NSPredicate(format: "label BEGINSWITH %@", "Избранное")).firstMatch
-        XCTAssertTrue(favoriteMode.waitForExistence(timeout: 5))
-        favoriteMode.click()
+        let refresh = app.buttons["searchVacanciesButton"]
+        XCTAssertTrue(refresh.waitForExistence(timeout: 5))
+        refresh.click()
+        XCTAssertTrue(app.staticTexts["vacancyTitle.ui-1"].waitForExistence(timeout: 8))
+        app.radioButtons["trudvsem.ru"].click()
+        XCTAssertTrue(app.buttons["refreshTrudvsemButton"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["searchVacanciesButton"].exists)
-        XCTAssertFalse(app.descendants(matching: .any)["vacancyUpdateStatus"].exists)
-        XCTAssertTrue(app.staticTexts["В избранном пока нет вакансий"].exists)
+        app.buttons["refreshTrudvsemButton"].click()
+        XCTAssertTrue(app.staticTexts["Администратор баз данных"].waitForExistence(timeout: 8))
+        choose("НСИС", from: "employerFilterPicker", in: app)
+        app.radioButtons["hh.ru"].click()
+        XCTAssertTrue(app.staticTexts["vacancyTitle.ui-1"].exists)
+        app.radioButtons["trudvsem.ru"].click()
+        XCTAssertTrue(app.staticTexts["Администратор баз данных"].exists)
+        let screenshot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        screenshot.name = "Independent trudvsem source"; screenshot.lifetime = .keepAlways; add(screenshot)
+
     }
 
     func testSearchShowsConfiguredVacanciesAndLazyDetails() {
@@ -100,6 +109,14 @@ final class HHVacancyCBRUITests: XCTestCase {
         XCTAssertTrue(status.waitForExistence(timeout: 8))
         XCTAssertLessThan(status.frame.maxX, refresh.frame.minX)
         XCTAssertGreaterThan(status.frame.minY, refresh.frame.maxY)
+        let fieldCount = app.staticTexts["fieldInstitutionCount"]
+        let vacancyCount = app.staticTexts["displayedVacancyCount"]
+        XCTAssertTrue(fieldCount.exists)
+        XCTAssertEqual(vacancyCount.frame.midY, fieldCount.frame.midY, accuracy: 2)
+        XCTAssertEqual(fieldCount.frame.midY, status.frame.midY, accuracy: 2)
+        XCTAssertLessThan(fieldCount.frame.maxX, status.frame.minX)
+        XCTAssertFalse(app.popUpButtons["Сортировка"].exists)
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "уникальных вакансий")).firstMatch.exists)
     }
 
     func testEmployerDropdownListsOptionsAndFiltersResults() {
@@ -180,32 +197,8 @@ final class HHVacancyCBRUITests: XCTestCase {
         add(attachment)
     }
 
-    func testFavoritePDFCommandsHaveMatchingHeightAndNoLeadingStatisticsIcon() {
-        let app = launch()
-        app.buttons["searchVacanciesButton"].click()
-        XCTAssertTrue(app.staticTexts["vacancyTitle.ui-1"].waitForExistence(timeout: 8))
-        app.buttons["☆ В избранное"].firstMatch.click()
-        let favoriteMode = app.radioButtons.matching(NSPredicate(format: "label BEGINSWITH %@", "Избранное")).firstMatch
-        XCTAssertTrue(favoriteMode.waitForExistence(timeout: 5))
-        favoriteMode.click()
-        let report = app.buttons["exportStatisticsPDFButton"]
-        let favorites = app.buttons["exportFavoritesPDFButton"]
-        let personal = app.buttons["exportVacancyPDF.ui-1"]
-        XCTAssertTrue(favorites.waitForExistence(timeout: 5))
-        XCTAssertTrue(report.isEnabled)
-        XCTAssertEqual(report.frame.height, favorites.frame.height, accuracy: 1)
-        XCTAssertEqual(report.frame.height, personal.frame.height, accuracy: 1)
-        XCTAssertEqual(report.frame.midY, favorites.frame.midY, accuracy: 1)
-        XCTAssertLessThan(favorites.frame.maxX, report.frame.minX)
-        XCTAssertEqual(report.frame.maxX, personal.frame.maxX, accuracy: 2)
-        XCTAssertEqual(report.images.count, 0)
-        let attachment = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
-        attachment.name = "Matching PDF commands in favorites"
-        attachment.lifetime = .keepAlways
-        add(attachment)
-    }
 
-    func testStatisticsCommandRemainsAvailableForEmptyCombinedFilter() {
+    func testStatisticsCommandDisabledForEmptyCombinedFilter() {
         let app = launch()
         app.buttons["searchVacanciesButton"].click()
         XCTAssertTrue(app.staticTexts["vacancyTitle.ui-1"].waitForExistence(timeout: 8))
@@ -213,7 +206,7 @@ final class HHVacancyCBRUITests: XCTestCase {
         choose("Удалённо", from: "regionFilterPicker", in: app)
         XCTAssertTrue(app.staticTexts["Вакансий не найдено"].waitForExistence(timeout: 5))
         let report = app.buttons["exportStatisticsPDFButton"]
-        XCTAssertTrue(report.isEnabled)
+        XCTAssertFalse(report.isEnabled)
         XCTAssertEqual(report.label, "Статистика в PDF")
         XCTAssertEqual(report.frame.height, 32, accuracy: 2)
         XCTAssertEqual(app.staticTexts["displayedVacancyCount"].value as? String, "Показано вакансий: 0")
@@ -256,27 +249,13 @@ final class HHVacancyCBRUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Вакансий не найдено"].exists)
     }
 
-    func testPartialSearchShowsReceivedVacanciesAndWarning() {
+    func testPartialSearchKeepsSnapshotUnpublished() {
         let app = launch(scenario: "partial")
         app.buttons["searchVacanciesButton"].click()
-        XCTAssertTrue(app.staticTexts["vacancyTitle.ui-1"].waitForExistence(timeout: 8))
-        XCTAssertFalse(app.staticTexts["vacancyTitle.ui-3"].exists, "The failed employer contributes no rows")
-
-        let warning = app.descendants(matching: .any)["collectionWarning"]
-        XCTAssertTrue(warning.waitForExistence(timeout: 5))
-        // macOS exposes static text in `value`; `label` may be empty.
-        let warningText = [warning.label, warning.value as? String ?? ""].joined(separator: " ")
-        XCTAssertTrue(warningText.contains("Выгрузка неполная"), warningText)
-        XCTAssertTrue(warningText.contains("НСПК"), warningText)
-        let attachment = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
-        attachment.name = "Partial search warning"
-        attachment.lifetime = .keepAlways
-        add(attachment)
-
-        let favoriteMode = app.radioButtons.matching(NSPredicate(format: "label BEGINSWITH %@", "Избранное")).firstMatch
-        XCTAssertTrue(favoriteMode.waitForExistence(timeout: 5))
-        favoriteMode.click()
-        XCTAssertTrue(waitForDisappearance(of: warning), "The warning belongs to the vacancy list, not to favorites")
+        XCTAssertTrue(app.descendants(matching: .any)["collectionWarning"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.staticTexts["vacancyTitle.ui-1"].exists)
+        app.radioButtons["trudvsem.ru"].click()
+        XCTAssertFalse(app.descendants(matching: .any)["collectionWarning"].exists)
     }
 
     private func waitForLabel(_ label: String, of element: XCUIElement, timeout: TimeInterval = 5) -> Bool {

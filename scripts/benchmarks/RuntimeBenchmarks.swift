@@ -12,6 +12,8 @@ struct RuntimeBenchmarks {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("HHRuntimeBench-\(UUID())")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
+        // Synthetic benchmark receipts are isolated from the user's production archive.
+        setenv("XCTestConfigurationFilePath", "benchmark", 1)
         let values = (0..<count).map { vacancy($0, paragraphs: mode == "stress" ? 1200 : 12) }
         let start = ProcessInfo.processInfo.systemUptime
         var before = rusage()
@@ -37,20 +39,14 @@ struct RuntimeBenchmarks {
         } else if mode.hasPrefix("enrichment") {
             let client = FixtureClient(mode: mode)
             let exporter = ExportProbe()
-            let records = values.map { FavoriteVacancyRecord(result: $0, favoritedAt: Date(), updatedAt: Date()) }
+            let store = VacancySnapshotStore(fileURL: directory.appendingPathComponent("vacancies.json"))
+            try store.save(VacancySnapshot(values: values, issues: [], updatedAt: Date()))
             let model = VacancySearchViewModel(apiClient: client, employerStore: Employers(),
                 areaStore: AreaDirectoryStore(fileURL: directory.appendingPathComponent("areas.json")),
-                favoritesStore: InMemoryFavoriteVacancyStore(favorites: records), favoritePDFExporter: exporter)
+                snapshotStore: store, bulkPDFExporter: exporter)
             await model.loadPersistenceIfNeeded()
-            if mode == "enrichment-favorites" { model.displayMode = .favorites }
-            let expectedIDs = model.favorites.map(\.id)
-            await model.exportFavoriteVacanciesPDF()
-            if mode == "enrichment-repeat" || mode == "enrichment-favorites" {
-                await model.exportFavoriteVacanciesPDF()
-                precondition(exporter.calls == 2 && exporter.lastIDs == expectedIDs)
-                let requestCount = await client.requests
-                precondition(requestCount == count)
-            }
+            await model.exportVacanciesPDF()
+            if mode == "enrichment-repeat" { await model.exportVacanciesPDF() }
             result["detail_requests"] = await client.requests
             result["export_calls"] = exporter.calls
         } else if mode == "search" {
@@ -64,23 +60,6 @@ struct RuntimeBenchmarks {
             )
             precondition(collected.isComplete && collected.vacancies.count == count)
             result["search_requests"] = await client.requests
-        } else if mode == "archive" {
-            let client = FixtureClient(mode: mode)
-            let records = values.map {
-                FavoriteVacancyRecord(result: $0, favoritedAt: .distantPast, updatedAt: .distantPast)
-            }
-            let store = InMemoryFavoriteVacancyStore(favorites: records)
-            let model = VacancySearchViewModel(
-                apiClient: client,
-                employerStore: Employers(),
-                areaStore: AreaDirectoryStore(fileURL: directory.appendingPathComponent("areas.json")),
-                favoritesStore: store,
-                currentDate: { Date(timeIntervalSince1970: 1_788_400_000) }
-            )
-            await model.checkArchiveStatusesIfNeeded()
-            await model.waitForPendingFavoritesSaves()
-            precondition(model.favorites.allSatisfy { $0.archiveCheckedAt != nil })
-            result["detail_requests"] = await client.requests
         } else {
             let worker = PDFExportWorker()
             var pages = 0
@@ -156,10 +135,13 @@ struct RuntimeBenchmarks {
     }
 
     static func vacancy(_ index: Int, paragraphs: Int) -> VacancySearchResult {
-        let summary = HHVacancySummary(id: "\(index)", name: "Вакансия \(index)",
+        var summary = HHVacancySummary(id: "\(index)", name: "Вакансия \(index)",
             employer: .init(name: "Банк России", id: "47858"), salary: nil,
             area: .init(id: "1", name: "Москва"), alternateURL: nil, url: nil, snippet: nil,
             publishedAt: "2026-09-01T10:00:00+0300")
+        let bytes = try! JSONEncoder().encode(summary)
+        summary.observationID = try! PDFSourceEvidence.shared.capture(data: bytes,
+            url: URL(string: "https://api.hh.ru/vacancies/" + summary.id)!, status: 200, sent: Date(), received: Date())!.id
         let html = (0..<paragraphs).map { "<p>Раздел \($0). Разработка надёжных сервисов, анализ данных и тестирование. Swift, SQL, Unicode: ёж, Ω.</p>" }.joined()
         return VacancySearchResult(id: summary.id, summary: summary,
             details: .init(id: summary.id, name: summary.name, employer: summary.employer, area: summary.area,
@@ -201,10 +183,10 @@ private struct Employers: EmployerConfigurationStoring {
     func loadOrCreate() throws -> EmployerConfiguration { .init(version: 1, employers: []) }
 }
 
-@MainActor private final class ExportProbe: FavoriteVacanciesPDFExporting {
+@MainActor private final class ExportProbe: VacanciesPDFExporting {
     var calls = 0
     var lastIDs: [String] = []
-    func export(vacancies: [VacancySearchResult], progress: @escaping @MainActor @Sendable (FavoritePDFExportProgress) -> Void) async throws -> FavoritePDFExportOutcome {
+    func export(vacancies: [VacancySearchResult], progress: @escaping @MainActor @Sendable (BulkPDFExportProgress) -> Void) async throws -> BulkPDFExportOutcome {
         calls += 1
         lastIDs = vacancies.map(\.id)
         return .cancelled
@@ -225,17 +207,7 @@ private actor FixtureClient: HHVacancyAPIClient {
         if mode == "enrichment-cancel" { throw CancellationError() }
         if mode == "enrichment-limit" { throw HHAPIError.rateLimited(retryAfterSeconds: 60) }
         let value = RuntimeBenchmarks.vacancy(Int(id) ?? 0, paragraphs: 12)
-        guard mode == "archive" else { return value.details }
-        return .init(
-            id: value.id,
-            name: value.name,
-            employer: value.details.employer,
-            area: value.details.area,
-            salary: value.details.salary,
-            alternateURL: value.details.alternateURL,
-            description: value.details.description,
-            archived: true
-        )
+        return value.details
     }
     func searchVacancies(_ request: HHVacancySearchRequest) async throws -> HHVacancySearchResponse {
         guard mode == "search" else { fatalError("No live search") }

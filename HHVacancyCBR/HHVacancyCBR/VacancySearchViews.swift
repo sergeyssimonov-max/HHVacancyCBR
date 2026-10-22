@@ -5,6 +5,7 @@ enum VacancySearchViews {
     struct MainWindow: View {
         @ObservedObject var viewModel: VacancySearchViewModel
         let refresh: () -> Void
+        @Binding var source: VacancySource
 
         private enum ToolbarMetrics {
             static let controlHeight: CGFloat = 32
@@ -18,9 +19,8 @@ enum VacancySearchViews {
                 Divider()
                 statusBar
                 Divider()
-                if let warning = viewModel.favoritesWarning { warningView(warning) }
-                if !viewModel.isShowingFavorites, let warning = viewModel.snapshotWarning { warningView(warning) }
-                if !viewModel.isShowingFavorites, let warning = viewModel.collectionWarning {
+                if let warning = viewModel.snapshotWarning { warningView(warning) }
+                if let warning = viewModel.collectionWarning {
                     warningView(warning)
                         .accessibilityElement(children: .combine)
                         .accessibilityIdentifier("collectionWarning")
@@ -32,9 +32,9 @@ enum VacancySearchViews {
 
         private var toolbar: some View {
             HStack(spacing: 14) {
-                Picker("", selection: $viewModel.displayMode) {
-                    Text("Вакансии").tag(VacancyListMode.all)
-                    Text(viewModel.favorites.isEmpty ? "Избранное" : "Избранное · \(viewModel.favorites.count)").tag(VacancyListMode.favorites)
+                Picker("", selection: $source) {
+                    Text("hh.ru").tag(VacancySource.hh)
+                    Text("trudvsem.ru").tag(VacancySource.trudvsem)
                 }
                 .pickerStyle(.segmented)
                 .frame(width: ToolbarMetrics.modeWidth, height: ToolbarMetrics.controlHeight)
@@ -64,7 +64,7 @@ enum VacancySearchViews {
                 .frame(height: ToolbarMetrics.controlHeight)
                 .accessibilityIdentifier("regionFilterPicker")
 
-                if !viewModel.isShowingFavorites {
+                Group {
                     Button {
                         if viewModel.isLoading { viewModel.cancelSearch() } else { refresh() }
                     } label: {
@@ -90,15 +90,13 @@ enum VacancySearchViews {
             return viewModel.isCancellingSearch ? "Отмена…" : "Отменить"
         }
 
-        private var favoritesExportTitle: String {
-            guard viewModel.isExportingFavoritesPDF else { return "Экспортировать всё в PDF" }
-            return viewModel.isCancellingFavoritesPDFExport ? "Отмена…" : "Отменить экспорт"
+        private var bulkExportTitle: String {
+            guard viewModel.isExportingBulkPDF else { return "Все вакансии в PDF" }
+            return viewModel.isCancellingBulkPDFExport ? "Отмена…" : "Отменить экспорт"
         }
 
         @ViewBuilder private var content: some View {
-            if viewModel.isShowingFavorites && viewModel.displayedResults.isEmpty {
-                empty(title: "В избранном пока нет вакансий", message: "Добавьте вакансию в избранное из общего списка.", action: nil)
-            } else if viewModel.isLoading && viewModel.displayedResults.isEmpty {
+            if viewModel.isLoading && viewModel.displayedResults.isEmpty {
                 VStack(spacing: 12) { ProgressView(); Text("Загружаем вакансии всех настроенных работодателей…") }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let error = viewModel.errorMessage, viewModel.displayedResults.isEmpty {
@@ -114,36 +112,33 @@ enum VacancySearchViews {
 
         private var statusBar: some View {
             HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 12) {
-                        Text(viewModel.displayedVacancyCountMessage)
-                            .accessibilityIdentifier("displayedVacancyCount")
-                        Text("Полевые учреждения: \(viewModel.displayedResults.filter(\.isFieldInstitution).count)")
-                    }
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-                    if !viewModel.isShowingFavorites, let updatedAt = viewModel.updatedAtMessage {
-                        Text(updatedAt)
-                            .font(.caption)
-                            .lineLimit(1)
-                            .accessibilityIdentifier("vacancyUpdateStatus")
-                    }
+                Text(viewModel.displayedVacancyCountMessage)
+                    .accessibilityIdentifier("displayedVacancyCount")
+                Text("Полевые учреждения: \(viewModel.displayedResults.filter(\.isFieldInstitution).count)")
+                    .accessibilityIdentifier("fieldInstitutionCount")
+                if let updatedAt = viewModel.updatedAtMessage {
+                    Text(updatedAt)
+                        .accessibilityIdentifier("vacancyUpdateStatus")
+                }
+                if let message = viewModel.statisticsPDFExportMessage ?? viewModel.statusMessage,
+                   !message.hasPrefix("Готово"), !message.hasPrefix("Показана сохранённая") {
+                    Text(message).truncationMode(.tail).help(message).layoutPriority(-1)
                 }
                 Spacer()
-                if viewModel.isShowingFavorites {
-                    if let progress = viewModel.favoritesPDFExportProgress {
-                        ProgressView(value: Double(progress.completedVacancies), total: Double(max(1, progress.totalVacancies))).frame(width: 90)
+                Group {
+                    if let progress = viewModel.bulkPDFExportProgress {
+                        Text("\(progress.stage): \(progress.completedVacancies) / \(progress.totalVacancies)").layoutPriority(-1)
                     }
-                    PDFExportCommand(title: favoritesExportTitle) {
-                        if viewModel.isExportingFavoritesPDF {
-                            viewModel.cancelFavoritesPDFExport()
+                    PDFExportCommand(title: bulkExportTitle) {
+                        if viewModel.isExportingBulkPDF {
+                            viewModel.cancelBulkPDFExport()
                         } else {
-                            viewModel.startFavoritesPDFExport()
+                            viewModel.startBulkPDFExport()
                         }
-                    }.disabled(viewModel.isExportingFavoritesPDF
-                        ? !viewModel.canCancelFavoritesPDFExport
-                        : !viewModel.canExportFavoritesPDF)
-                        .accessibilityIdentifier("exportFavoritesPDFButton")
+                    }.disabled(viewModel.isExportingBulkPDF
+                        ? !viewModel.canCancelBulkPDFExport
+                        : !viewModel.canExportBulkPDF)
+                        .accessibilityIdentifier("exportBulkPDFButton")
                 }
                 PDFExportCommand(title: viewModel.isExportingStatisticsPDF ? "Сохранение…" : "Статистика в PDF") {
                     Task { await viewModel.exportStatisticsPDF() }
@@ -152,6 +147,7 @@ enum VacancySearchViews {
                 .help("Сохранить статистику и список вакансий под текущими фильтрами")
                 .accessibilityIdentifier("exportStatisticsPDFButton")
             }
+            .lineLimit(1)
             .font(.system(size: 13))
             .foregroundColor(.secondary)
             .padding(.leading, 28)
@@ -167,9 +163,7 @@ enum VacancySearchViews {
                         ForEach(viewModel.displayedResults) { result in
                             VacancyCard(
                                 result: result,
-                                isFavorite: viewModel.isFavorite(id: result.id),
                                 isExpanded: viewModel.expandedVacancyID == result.id,
-                                toggleFavorite: { viewModel.toggleFavorite(id: result.id) },
                                 toggleDetails: { viewModel.toggleExplanation(for: result.id) },
                                 openURL: { viewModel.openVacancyURL(id: result.id) },
                                 copyURL: { viewModel.copyVacancyURL(id: result.id) },
@@ -207,7 +201,7 @@ enum VacancySearchViews {
 }
 
 @MainActor
-private struct PDFExportCommand: View {
+struct PDFExportCommand: View {
     let title: String
     let action: () -> Void
 
@@ -227,9 +221,7 @@ private struct PDFExportCommand: View {
 @MainActor
 private struct VacancyCard: View {
     let result: VacancySearchResult
-    let isFavorite: Bool
     let isExpanded: Bool
-    let toggleFavorite: () -> Void
     let toggleDetails: () -> Void
     let openURL: () -> Void
     let copyURL: () -> Bool
@@ -264,8 +256,6 @@ private struct VacancyCard: View {
             HStack(spacing: 10) {
                 Button("Открыть на hh.ru ↗", action: openURL).disabled(result.alternateURL == nil)
                 Button(copied ? "✓ Скопировано" : "Скопировать ссылку") { if copyURL() { copied = true } }.disabled(result.alternateURL == nil)
-                Button(isFavorite ? "★ В избранном" : "☆ В избранное", action: toggleFavorite)
-                    .accessibilityIdentifier("favoriteVacancy.\(result.id)")
                 Button(isExpanded ? "Скрыть детали" : "Подробнее", action: toggleDetails)
                     .accessibilityIdentifier("expandVacancy.\(result.id)")
                 Spacer()
@@ -343,7 +333,7 @@ struct VacancyHTMLDescriptionView: NSViewRepresentable {
     }
 }
 
-private enum DeskPalette {
+enum DeskPalette {
     static let content = Color(nsColor: .textBackgroundColor)
     static let toolbar = Color(nsColor: .windowBackgroundColor)
 }

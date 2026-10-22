@@ -6,37 +6,18 @@ enum WindowLayoutPolicy {
 }
 
 struct ContentView: View {
-    @ObservedObject private var viewModel: VacancySearchViewModel
-    @Environment(\.scenePhase) private var scenePhase
-    private let archiveCheckTimer = Timer.publish(
-        every: VacancySearchViewModel.archiveBatchInterval,
-        on: .main,
-        in: .common
-    ).autoconnect()
-
-    init(viewModel: VacancySearchViewModel) {
-        self.viewModel = viewModel
-    }
-
+    @ObservedObject var viewModel: VacancySearchViewModel
+    @StateObject private var trudvsem = AppComposition.makeTrudvsemViewModel()
+    @State private var source: VacancySource = .hh
     var body: some View {
-        VacancySearchViews.MainWindow(
-            viewModel: viewModel,
-            refresh: { viewModel.startRefresh() }
-        )
-        .frame(
-            minWidth: WindowLayoutPolicy.minimumSize.width,
-            minHeight: WindowLayoutPolicy.minimumSize.height
-        )
-        .task {
-            await viewModel.loadPersistenceIfNeeded()
-            await viewModel.checkArchiveStatusesIfNeeded(background: true)
+        Group {
+            if source == .hh {
+                VacancySearchViews.MainWindow(viewModel: viewModel, refresh: { viewModel.startRefresh() }, source: $source)
+            } else {
+                TrudvsemViews(viewModel: trudvsem, source: $source)
+            }
         }
-        .onReceive(archiveCheckTimer) { _ in
-            Task { await viewModel.checkArchiveStatusesIfNeeded(background: true) }
-        }
-        .onChange(of: scenePhase) { phase in
-            guard phase == .active else { return }
-            Task { await viewModel.checkArchiveStatusesIfNeeded(background: true) }
-        }
+        .frame(minWidth: WindowLayoutPolicy.minimumSize.width, minHeight: WindowLayoutPolicy.minimumSize.height)
+        .task { await viewModel.loadPersistenceIfNeeded(); trudvsem.load() }
     }
 }
