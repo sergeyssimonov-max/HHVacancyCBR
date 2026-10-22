@@ -193,19 +193,10 @@ final class VacancySearchViewModel: ObservableObject {
     }
 
     var displayedResults: [VacancySearchResult] {
-        let values = unfilteredResults.filter { !fieldInstitutionsOnly || $0.isFieldInstitution }
-        let filtered: [VacancySearchResult]
-        switch (selectedEmployerID == "all", selectedRegionID == "all") {
-        case (true, true):
-            filtered = values
-        case (false, true):
-            filtered = values.filter { organizationKey(forHH: $0.employerID ?? "") == selectedEmployerID }
-        case (true, false):
-            filtered = values.filter { $0.location.filterID == selectedRegionID }
-        case (false, false):
-            filtered = values
-                .filter { organizationKey(forHH: $0.employerID ?? "") == selectedEmployerID }
-                .filter { $0.location.filterID == selectedRegionID }
+        let filtered = unfilteredResults.filter {
+            (!fieldInstitutionsOnly || $0.isFieldInstitution)
+                && (selectedEmployerID == "all" || organizationKey(forHH: $0.employerID ?? "") == selectedEmployerID)
+                && (selectedRegionID == "all" || $0.location.filterID == selectedRegionID)
         }
         return sort == .newest ? orderedNewestFirst(filtered) : filtered.sorted { $0.name == $1.name ? $0.id < $1.id : $0.name < $1.name }
     }

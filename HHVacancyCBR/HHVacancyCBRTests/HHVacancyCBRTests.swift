@@ -6,6 +6,33 @@ import SwiftUI
 @testable import HHVacancyCBR
 
 final class HHVacancyCBRTests: XCTestCase {
+    @MainActor
+    func testRefreshSchedulerCancellationDoesNotLeakPermit() async throws {
+        try await VacancyRefreshScheduler.acquire()
+        let waiting = Task { try await VacancyRefreshScheduler.acquire() }
+        await Task.yield()
+        waiting.cancel()
+        do { try await waiting.value; XCTFail("Cancelled waiter acquired a permit") }
+        catch { XCTAssertTrue(error is CancellationError) }
+        VacancyRefreshScheduler.release()
+        try await VacancyRefreshScheduler.acquire()
+        VacancyRefreshScheduler.release()
+    }
+
+    @MainActor
+    func testRefreshSchedulerTransfersPermit() async throws {
+        try await VacancyRefreshScheduler.acquire()
+        let waiting = Task {
+            try await VacancyRefreshScheduler.acquire()
+            VacancyRefreshScheduler.release()
+        }
+        await Task.yield()
+        VacancyRefreshScheduler.release()
+        try await waiting.value
+        try await VacancyRefreshScheduler.acquire()
+        VacancyRefreshScheduler.release()
+    }
+
     private func fieldSummary(_ title: String, id: String = "field", employer: String = "47858", description: String? = nil,
                               area: HHArea = .init(id: "1", name: "Москва")) -> HHVacancySummary {
         .init(id: id, name: title, employer: .init(name: "Банк России", id: employer), salary: nil,
@@ -3505,6 +3532,29 @@ extension HHVacancyCBRTests {
         XCTAssertEqual(materials.first?.data, data)
         XCTAssertThrowsError(try evidence.materials(for: DocumentContext(kind: "test", vacancyIDs: ["trudvsem.ru:division-a:a"], observationIDs: [record.id])))
     }
+    @MainActor
+    func testTrudDisplayCacheInvalidatesAfterFiltersAndRefresh() async throws {
+        let store = TrudvsemSnapshotStore(configuredURL: temporaryDirectory().appendingPathComponent("cache.json"))
+        let value = try TrudFixture.documented()
+        try store.save(.init(version: 1, vacancies: [value], metrics: [], updatedAt: .distantPast))
+        let model = TrudvsemViewModel(client: TrudScriptedClient([try TrudFixture.page([])]), store: store)
+        model.load()
+        XCTAssertEqual(model.displayedResults, [value])
+        model.selectedEmployerID = "nsis"
+        XCTAssertTrue(model.displayedResults.isEmpty)
+        model.selectedEmployerID = "all"
+        XCTAssertEqual(model.displayedResults, [value])
+        model.selectedRegionID = "missing"
+        XCTAssertTrue(model.displayedResults.isEmpty)
+        model.selectedRegionID = "all"
+        XCTAssertEqual(model.displayedResults, [value])
+        XCTAssertGreaterThan(model.regions.count, 1)
+        await model.refresh()
+        XCTAssertNil(model.errorMessage)
+        XCTAssertTrue(model.displayedResults.isEmpty)
+        XCTAssertEqual(model.regions.count, 1)
+    }
+
     @MainActor
     func testIndependentRefreshCancellationAndOfflineSnapshots() async throws {
         let dir = temporaryDirectory(), store = TrudvsemSnapshotStore(configuredURL: dir.appendingPathComponent("trud.json"))

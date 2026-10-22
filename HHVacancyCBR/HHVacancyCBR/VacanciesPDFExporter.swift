@@ -1612,55 +1612,57 @@ final class VacanciesPDFExporter: VacanciesPDFExporting {
         }
         for (index, page) in pages.enumerated() {
             try Task.checkCancellation()
-            context.beginPDFPage(nil)
-            context.saveGState()
-            context.setFillColor(NSColor.white.cgColor)
-            context.fill(mediaBox)
-            context.translateBy(x: 0, y: VacancyPDFDefaults.paperSize.height)
-            context.scaleBy(x: 1, y: -1)
-            NSGraphicsContext.saveGraphicsState()
-            NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
-            let monochromeContent = NSMutableAttributedString(attributedString: page.content)
-            monochromeContent.removeAttribute(.link, range: NSRange(location: 0, length: monochromeContent.length))
-            monochromeContent.draw(
-                with: NSRect(
-                    x: VacancyPDFDefaults.horizontalMargin, y: VacancyPDFDefaults.verticalMargin,
-                    width: VacancyPDFDefaults.paperSize.width - VacancyPDFDefaults.horizontalMargin * 2,
-                    height: VacancyPDFDefaults.paperSize.height - VacancyPDFDefaults.verticalMargin * 2
-                ),
-                options: [.usesLineFragmentOrigin, .usesFontLeading]
-            )
-            let linkStorage = NSTextStorage(attributedString: monochromeContent)
-            let linkLayout = NSLayoutManager()
-            let linkContainer = NSTextContainer(size: NSSize(width: VacancyPDFDefaults.paperSize.width - VacancyPDFDefaults.horizontalMargin * 2, height: .greatestFiniteMagnitude))
-            linkContainer.lineFragmentPadding = 0
-            linkStorage.addLayoutManager(linkLayout)
-            linkLayout.addTextContainer(linkContainer)
-            linkLayout.ensureLayout(for: linkContainer)
-            page.content.enumerateAttribute(.link, in: NSRange(location: 0, length: page.content.length)) { value, range, _ in
-                guard let value, let url = (value as? URL) ?? URL(string: String(describing: value)) else { return }
-                let glyphs = linkLayout.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
-                linkLayout.enumerateEnclosingRects(forGlyphRange: glyphs, withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0), in: linkContainer) { rect, _ in
-                    context.setURL(url as CFURL, for: CGRect(x: rect.minX + VacancyPDFDefaults.horizontalMargin,
-                        y: VacancyPDFDefaults.paperSize.height - VacancyPDFDefaults.verticalMargin - rect.maxY,
-                        width: rect.width, height: rect.height))
+            autoreleasepool {
+                context.beginPDFPage(nil)
+                context.saveGState()
+                context.setFillColor(NSColor.white.cgColor)
+                context.fill(mediaBox)
+                context.translateBy(x: 0, y: VacancyPDFDefaults.paperSize.height)
+                context.scaleBy(x: 1, y: -1)
+                NSGraphicsContext.saveGraphicsState()
+                NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
+                let monochromeContent = NSMutableAttributedString(attributedString: page.content)
+                monochromeContent.removeAttribute(.link, range: NSRange(location: 0, length: monochromeContent.length))
+                monochromeContent.draw(
+                    with: NSRect(
+                        x: VacancyPDFDefaults.horizontalMargin, y: VacancyPDFDefaults.verticalMargin,
+                        width: VacancyPDFDefaults.paperSize.width - VacancyPDFDefaults.horizontalMargin * 2,
+                        height: VacancyPDFDefaults.paperSize.height - VacancyPDFDefaults.verticalMargin * 2
+                    ),
+                    options: [.usesLineFragmentOrigin, .usesFontLeading]
+                )
+                let linkStorage = NSTextStorage(attributedString: monochromeContent)
+                let linkLayout = NSLayoutManager()
+                let linkContainer = NSTextContainer(size: NSSize(width: VacancyPDFDefaults.paperSize.width - VacancyPDFDefaults.horizontalMargin * 2, height: .greatestFiniteMagnitude))
+                linkContainer.lineFragmentPadding = 0
+                linkStorage.addLayoutManager(linkLayout)
+                linkLayout.addTextContainer(linkContainer)
+                linkLayout.ensureLayout(for: linkContainer)
+                page.content.enumerateAttribute(.link, in: NSRange(location: 0, length: page.content.length)) { value, range, _ in
+                    guard let value, let url = (value as? URL) ?? URL(string: String(describing: value)) else { return }
+                    let glyphs = linkLayout.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+                    linkLayout.enumerateEnclosingRects(forGlyphRange: glyphs, withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0), in: linkContainer) { rect, _ in
+                        context.setURL(url as CFURL, for: CGRect(x: rect.minX + VacancyPDFDefaults.horizontalMargin,
+                            y: VacancyPDFDefaults.paperSize.height - VacancyPDFDefaults.verticalMargin - rect.maxY,
+                            width: rect.width, height: rect.height))
+                    }
                 }
+                let footerY = VacancyPDFDefaults.paperSize.height - 30
+                let rule = NSBezierPath()
+                rule.move(to: NSPoint(x: VacancyPDFDefaults.horizontalMargin, y: footerY - 8))
+                rule.line(to: NSPoint(x: VacancyPDFDefaults.paperSize.width - VacancyPDFDefaults.horizontalMargin, y: footerY - 8))
+                VacancyPDFStyle.ink.setStroke()
+                rule.lineWidth = 0.25
+                rule.stroke()
+                let footerAttributes: [NSAttributedString.Key: Any] = [
+                    .font: VacancyPDFStyle.font(ofSize: 7), .foregroundColor: VacancyPDFStyle.ink
+                ]
+                let pageLabel = "\(pageOffset + index + 1)" as NSString
+                pageLabel.draw(at: NSPoint(x: VacancyPDFDefaults.paperSize.width - VacancyPDFDefaults.horizontalMargin - pageLabel.size(withAttributes: footerAttributes).width, y: footerY), withAttributes: footerAttributes)
+                NSGraphicsContext.restoreGraphicsState()
+                context.restoreGState()
+                context.endPDFPage()
             }
-            let footerY = VacancyPDFDefaults.paperSize.height - 30
-            let rule = NSBezierPath()
-            rule.move(to: NSPoint(x: VacancyPDFDefaults.horizontalMargin, y: footerY - 8))
-            rule.line(to: NSPoint(x: VacancyPDFDefaults.paperSize.width - VacancyPDFDefaults.horizontalMargin, y: footerY - 8))
-            VacancyPDFStyle.ink.setStroke()
-            rule.lineWidth = 0.25
-            rule.stroke()
-            let footerAttributes: [NSAttributedString.Key: Any] = [
-                .font: VacancyPDFStyle.font(ofSize: 7), .foregroundColor: VacancyPDFStyle.ink
-            ]
-            let pageLabel = "\(pageOffset + index + 1)" as NSString
-            pageLabel.draw(at: NSPoint(x: VacancyPDFDefaults.paperSize.width - VacancyPDFDefaults.horizontalMargin - pageLabel.size(withAttributes: footerAttributes).width, y: footerY), withAttributes: footerAttributes)
-            NSGraphicsContext.restoreGraphicsState()
-            context.restoreGState()
-            context.endPDFPage()
             didRenderPage?(index)
         }
         context.closePDF()

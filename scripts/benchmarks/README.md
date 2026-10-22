@@ -10,7 +10,6 @@ bash scripts/benchmarks/build.sh "$benchmark_dir/benchmark"
 "$benchmark_dir/benchmark" enrichment-limit 100
 "$benchmark_dir/benchmark" enrichment-repeat 100
 "$benchmark_dir/benchmark" search 1000
-"$benchmark_dir/benchmark" archive 1000
 "$benchmark_dir/benchmark" pdf 10
 "$benchmark_dir/benchmark" pdf 100
 "$benchmark_dir/benchmark" pdf 500

@@ -31,7 +31,9 @@ enum VacancySort: String, CaseIterable { case newest = "Сначала новы�
 
 @MainActor
 final class TrudvsemViewModel: ObservableObject {
-    @Published private(set) var results: [TrudvsemVacancy] = []
+    @Published private(set) var results: [TrudvsemVacancy] = [] {
+        didSet { displayedCache = nil; regionsCache = nil }
+    }
     @Published private(set) var isLoading = false
     @Published private(set) var isCancellingSearch = false
     @Published private(set) var statusMessage: String?
@@ -39,10 +41,10 @@ final class TrudvsemViewModel: ObservableObject {
     @Published private(set) var updatedAt: Date?
     @Published private(set) var metrics: [TrudvsemCollection.Metrics] = []
     @Published private(set) var collectionIssues: [String] = []
-    @Published var selectedEmployerID = "all"
-    @Published var selectedRegionID = "all"
-    @Published var fieldInstitutionsOnly = false
-    @Published var sort: VacancySort = .newest
+    @Published var selectedEmployerID = "all" { didSet { displayedCache = nil } }
+    @Published var selectedRegionID = "all" { didSet { displayedCache = nil } }
+    @Published var fieldInstitutionsOnly = false { didSet { displayedCache = nil } }
+    @Published var sort: VacancySort = .newest { didSet { displayedCache = nil } }
     @Published var expandedID: String?
     @Published private(set) var isExporting = false
     @Published private(set) var exportProgress: BulkPDFExportProgress?
@@ -56,17 +58,32 @@ final class TrudvsemViewModel: ObservableObject {
         employerStore = TrudvsemEmployerConfigurationStore(configuredURL: store.configuredURL?.deletingLastPathComponent().appendingPathComponent("employers-trudvsem.json"))
     }
     deinit { searchTask?.cancel(); exportTask?.cancel() }
+    private var displayedCache: [TrudvsemVacancy]?
+    private var regionsCache: [VacancyFilterOption]?
+
     var displayedResults: [TrudvsemVacancy] {
-        results.filter { (selectedEmployerID == "all" || $0.organizationKey == selectedEmployerID)
+        if let displayedCache { return displayedCache }
+        let filtered = results.filter { (selectedEmployerID == "all" || $0.organizationKey == selectedEmployerID)
             && (selectedRegionID == "all" || $0.regionID == selectedRegionID)
-            && (!fieldInstitutionsOnly || $0.fieldInstitution.isMember) }.sorted {
-                if sort == .newest, $0.createdDate != $1.createdDate { return ($0.createdDate ?? .distantPast) > ($1.createdDate ?? .distantPast) }
-                if $0.title == $1.title { return $0.id < $1.id }; return $0.title < $1.title
-            }
+            && (!fieldInstitutionsOnly || $0.fieldInstitution.isMember) }
+        // Parse each date once, rather than repeatedly inside O(n log n) comparisons.
+        let sorted = filtered.map { (value: $0, date: sort == .newest ? $0.createdDate : nil) }.sorted {
+            if sort == .newest, $0.date != $1.date { return ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
+            if $0.value.title == $1.value.title { return $0.value.id < $1.value.id }
+            return $0.value.title < $1.value.title
+        }.map(\.value)
+        displayedCache = sorted
+        return sorted
     }
     var regions: [VacancyFilterOption] {
-        let groups = Dictionary(grouping: results, by: \.regionID)
-        return [.init(id: "all", title: "Все регионы")] + groups.keys.sorted().map { .init(id: $0, title: groups[$0]!.first!.region) }
+        if let regionsCache { return regionsCache }
+        var titles: [String: String] = [:]
+        for value in results where titles[value.regionID] == nil { titles[value.regionID] = value.region }
+        let options = [VacancyFilterOption(id: "all", title: "Все регионы")] + titles.keys.sorted().map {
+            VacancyFilterOption(id: $0, title: titles[$0] ?? $0)
+        }
+        regionsCache = options
+        return options
     }
     var filters: [String: String] { ["Организация": OrganizationRegistry.all.first { $0.id == selectedEmployerID }?.name ?? "Все организации",
         "Регион": regions.first { $0.id == selectedRegionID }?.title ?? selectedRegionID,
