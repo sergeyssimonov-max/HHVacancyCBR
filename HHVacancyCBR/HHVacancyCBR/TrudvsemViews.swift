@@ -57,7 +57,7 @@ struct TrudvsemViews: View {
             Text("Полевые учреждения: \(viewModel.displayedResults.filter { $0.fieldInstitution.isMember }.count)")
                 .accessibilityIdentifier("fieldInstitutionCount")
             if let date = viewModel.updatedAt {
-                Text("Обновлено: \(date.formatted())").accessibilityIdentifier("vacancyUpdateStatus")
+                Text(VacancyDisplayFormat.updatedAt(date)).accessibilityIdentifier("vacancyUpdateStatus")
             }
             VacancyStatusMessage(message: viewModel.isLoading ? viewModel.currentEmployerName : viewModel.finalExtractionStatus)
             Spacer()
@@ -75,12 +75,12 @@ struct TrudvsemViews: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(value.title).font(.system(size: 15, weight: .semibold))
                     Text(value.organization?.name ?? value.organizationKey).font(.system(size: 13)).foregroundColor(.secondary)
-                    if value.fieldInstitution.isMember { Text("Полевое учреждение").font(.caption).help(value.fieldInstitution.reason ?? "") }
+                    if value.fieldInstitution.isMember { Text("Полевое учреждение").font(.caption).foregroundColor(.secondary).help(value.fieldInstitution.reason ?? "") }
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 5) {
                     Text(value.salary ?? "Зарплата не указана").font(.system(size: 13))
-                    Text(value.region).font(.caption)
+                    Text(value.region).font(.caption).foregroundColor(.secondary)
                     if let date = value.created { Text("Создана: \(date)").font(.caption) }
                 }
             }

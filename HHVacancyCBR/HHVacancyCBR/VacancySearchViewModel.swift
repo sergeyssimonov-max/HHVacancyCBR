@@ -618,7 +618,6 @@ final class VacancySearchViewModel: ObservableObject {
         }.map(\.value)
     }
     private func timeMessage(_ date: Date) -> String {
-        let formatter = DateFormatter(); formatter.locale = Locale(identifier: "ru_RU"); formatter.timeStyle = .short; formatter.dateStyle = .short
-        return "Обновлено: \(formatter.string(from: date))"
+        VacancyDisplayFormat.updatedAt(date)
     }
 }

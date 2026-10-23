@@ -7,6 +7,16 @@ import SwiftUI
 
 final class HHVacancyCBRTests: XCTestCase {
     @MainActor
+    func testUpdateTimestampUsesLeadingZerosAnd24HourTime() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        for (hour, minute, expected) in [(7, 6, "07:06"), (0, 0, "00:00"), (23, 59, "23:59")] {
+            let date = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 1, day: 3, hour: hour, minute: minute)))
+            XCTAssertEqual(VacancyDisplayFormat.updatedAt(date), "Обновлено: 03.01.2026, \(expected)")
+        }
+    }
+
+    @MainActor
     func testRefreshSchedulerCancellationDoesNotLeakPermit() async throws {
         try await VacancyRefreshScheduler.acquire()
         let waiting = Task { try await VacancyRefreshScheduler.acquire() }
