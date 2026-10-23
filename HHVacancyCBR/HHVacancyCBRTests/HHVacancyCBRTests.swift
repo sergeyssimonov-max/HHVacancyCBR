@@ -1518,9 +1518,9 @@ final class HHVacancyCBRTests: XCTestCase {
         let model = makeFilterViewModel()
         await model.search()
 
-        XCTAssertEqual(model.employerFilterOptions.map(\.id), ["all", "hh_account_9999", "bank_of_russia", "nsis", "nspk", "rnpk", "rosinkas", "uk_fkbs"])
+        XCTAssertEqual(model.employerFilterOptions.map(\.id), ["all", "hh_account_9999", "bank_of_russia", "nsis", "nspk", "rnpk", "rosinkas"])
         XCTAssertEqual(model.employerFilterOptions.map(\.title), [
-            "Все работодатели", "Альфа Банк", "Банк России", "НСИС", "НСПК", "РНПК", "РОСИНКАС", "УК ФКБС"
+            "Все работодатели", "Альфа Банк", "Банк России", "НСИС", "НСПК", "РНПК", "РОСИНКАС"
         ])
         XCTAssertEqual(Set(model.employerFilterOptions.map(\.id)).count, model.employerFilterOptions.count)
 

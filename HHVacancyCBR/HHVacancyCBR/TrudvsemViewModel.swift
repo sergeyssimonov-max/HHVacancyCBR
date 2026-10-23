@@ -92,7 +92,7 @@ final class TrudvsemViewModel: ObservableObject {
         "Категория": fieldInstitutionsOnly ? "Полевые учреждения" : "Все вакансии", "Сортировка": sort.rawValue] }
     func load() {
         guard !loaded else { return }; loaded = true
-        do { _ = try employerStore.loadOrCreate(); if let snapshot = try store.load() { results = snapshot.vacancies; updatedAt = snapshot.updatedAt; metrics = snapshot.metrics; statusMessage = "Показана сохранённая полная выборка." } }
+        do { _ = try employerStore.loadOrCreate(); if let snapshot = try store.load() { results = snapshot.vacancies.filter { value in OrganizationRegistry.available(on: .trudvsem).contains { $0.id == value.organizationKey } }; updatedAt = snapshot.updatedAt; metrics = snapshot.metrics; statusMessage = "Показана сохранённая полная выборка." } }
         catch { errorMessage = "Не удалось прочитать снимок: \(error.localizedDescription)" }
     }
     func startRefresh() {
@@ -125,7 +125,7 @@ final class TrudvsemViewModel: ObservableObject {
             try employerStore.recordVerifiedCodes(snapshot.vacancies)
             // Atomic commit has no suspension point between persistence and publication.
             try store.save(snapshot)
-            results = snapshot.vacancies; updatedAt = snapshot.updatedAt
+            results = snapshot.vacancies.filter { value in OrganizationRegistry.available(on: .trudvsem).contains { $0.id == value.organizationKey } }; updatedAt = snapshot.updatedAt
             statusMessage = results.isEmpty ? "Открытых вакансий нет." : "Готово: \(results.count) уникальных вакансий."
         } catch is CancellationError { statusMessage = "Обновление отменено; сохранённая выборка не изменена." }
         catch { errorMessage = error.localizedDescription; statusMessage = "Обновление не завершено." }

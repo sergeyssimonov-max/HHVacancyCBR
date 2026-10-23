@@ -39,7 +39,7 @@ struct TrudvsemViews: View {
             }.labelsHidden().frame(width: 190).accessibilityIdentifier("categoryFilterPicker")
             Picker("Работодатель", selection: $viewModel.selectedEmployerID) {
                 Text("Все работодатели").tag("all")
-                ForEach(OrganizationRegistry.all) { Text($0.name).tag($0.id) }
+                ForEach(OrganizationRegistry.available(on: .trudvsem)) { Text($0.name).tag($0.id) }
             }.labelsHidden().frame(minWidth: 140, maxWidth: .infinity).accessibilityIdentifier("employerFilterPicker")
             Picker("Субъект", selection: $viewModel.selectedRegionID) {
                 ForEach(viewModel.regions) { Text($0.title).tag($0.id) }

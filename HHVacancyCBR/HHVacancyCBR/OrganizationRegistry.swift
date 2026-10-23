@@ -14,7 +14,6 @@ struct Organization: Identifiable, Codable, Equatable, Sendable {
     let ogrn: String
     let hhEmployerIDs: [String]
     let sources: [String]
-    var hhIdentification: String { hhEmployerIDs.isEmpty ? "Профиль не подтверждён" : "Подтверждён" }
 }
 
 enum OrganizationRegistry {
@@ -26,6 +25,25 @@ enum OrganizationRegistry {
         .init(id: "nsis", name: "НСИС", legalName: "АО «Национальная страховая информационная система»", relationship: "Банк России — единственный акционер, 100% акций", inn: "7720895647", ogrn: "1237700279508", hhEmployerIDs: ["9942121"], sources: ["https://www.cbr.ru/press/event/?id=14592", "https://nsis.ru/", "https://hh.ru/employer/9942121"]),
         .init(id: "uk_fkbs", name: "УК ФКБС", legalName: "ООО «Управляющая компания Фонда консолидации банковского сектора»", relationship: "Банк России — единственный участник, 100% капитала", inn: "7714997584", ogrn: "1177746688130", hhEmployerIDs: [], sources: ["https://www.cbr.ru/banking_sector/PrBankrot/", "https://amfbc.ru/"])
     ]
+    // Public company cards verified by matching INN on 2026-10-23, independently of open vacancies.
+    static let trudvsemProfiles: [String: String] = [
+        "bank_of_russia": "1037700013020", "rosinkas": "1027739529641",
+        "nspk": "1147746831352", "rnpk": "1167746727378",
+        "nsis": "1237700279508", "uk_fkbs": "1177746688130"
+    ]
+
+    static func available(on source: VacancySource) -> [Organization] {
+        switch source {
+        case .hh: return all.filter { !$0.hhEmployerIDs.isEmpty }
+        case .trudvsem: return all.filter { trudvsemProfiles[$0.id] != nil }
+        }
+    }
+
+    static func supportsHH(_ employer: EmployerConfigurationEntry) -> Bool {
+        guard let key = employer.organizationKey, let organization = all.first(where: { $0.id == key }) else { return true }
+        return !organization.hhEmployerIDs.isEmpty
+    }
+
     static func key(forHH id: String) -> String {
         if let org = all.first(where: { $0.hhEmployerIDs.contains(id) }) { return org.id }
         if FieldInstitutionClassifier.registry.contains(where: { $0.employerIDs.contains(id) }) { return "bank_of_russia" }
@@ -44,7 +62,7 @@ struct TrudvsemEmployerConfiguration: Codable, Sendable {
     let version: Int
     var employers: [Entry]
     static var defaults: Self {
-        .init(version: 1, employers: OrganizationRegistry.all.map {
+        .init(version: 1, employers: OrganizationRegistry.available(on: .trudvsem).map {
             .init(organizationKey: $0.id, inn: $0.inn, ogrn: $0.ogrn, confirmedCompanyCodes: [])
         })
     }
@@ -63,7 +81,7 @@ struct TrudvsemEmployerConfigurationStore: Sendable {
         guard value.version == 1, Set(value.employers.map(\.organizationKey)).count == value.employers.count else {
             throw TrudvsemError.invalid("Версия или дубликаты конфигурации работодателей")
         }
-        for org in OrganizationRegistry.all {
+        for org in OrganizationRegistry.available(on: .trudvsem) {
             guard let entry = value.employers.first(where: { $0.organizationKey == org.id }), entry.inn == org.inn, entry.ogrn == org.ogrn else {
                 throw TrudvsemError.invalid("Реквизиты \(org.name) в конфигурации")
             }
@@ -72,7 +90,8 @@ struct TrudvsemEmployerConfigurationStore: Sendable {
     }
     func recordVerifiedCodes(_ vacancies: [TrudvsemVacancy]) throws {
         var value = try loadOrCreate()
-        for index in value.employers.indices {
+        let activeKeys = Set(OrganizationRegistry.available(on: .trudvsem).map(\.id))
+        for index in value.employers.indices where activeKeys.contains(value.employers[index].organizationKey) {
             let entry = value.employers[index]
             let verified = vacancies.filter { $0.organizationKey == entry.organizationKey && $0.dto.raw["company"]["inn"].text == entry.inn && ($0.dto.raw["company"]["ogrn"].text == nil || $0.dto.raw["company"]["ogrn"].text == entry.ogrn) }.map { $0.dto.companyCode }
             value.employers[index].confirmedCompanyCodes = Array(Set(entry.confirmedCompanyCodes + verified)).sorted()

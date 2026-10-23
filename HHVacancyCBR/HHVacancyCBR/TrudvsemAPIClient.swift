@@ -94,7 +94,7 @@ struct TrudvsemCollectionService: Sendable {
     let client: any TrudvsemAPI
     var pageSize = 100
     var maximumDuration: TimeInterval = 15 * 60
-    func collect(organizations: [Organization] = OrganizationRegistry.all,
+    func collect(organizations: [Organization] = OrganizationRegistry.available(on: .trudvsem),
                  progress: @escaping @MainActor @Sendable (String) -> Void) async throws -> TrudvsemCollection {
         let started = Date()
         var all: [TrudvsemVacancy] = [], metrics: [TrudvsemCollection.Metrics] = [], issues: [String] = []

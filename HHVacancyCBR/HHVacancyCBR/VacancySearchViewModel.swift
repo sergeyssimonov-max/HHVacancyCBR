@@ -147,7 +147,6 @@ final class VacancySearchViewModel: ObservableObject {
     var displayedVacancyCountMessage: String { "Показано вакансий: \(displayedResults.count)" }
 
     var emptyResultsMessage: String {
-        if selectedEmployerID == "uk_fkbs" { return "Профиль УК ФКБС на hh.ru не подтверждён. Поиск по неподтверждённому ID не выполняется." }
         if selectedEmployerID != "all",
            !results.contains(where: { organizationKey(forHH: $0.employerID ?? "") == selectedEmployerID }),
            let employer = configuredEmployers.first(where: { $0.id == selectedEmployerID }) {
@@ -176,7 +175,8 @@ final class VacancySearchViewModel: ObservableObject {
                 titlesByID[organizationKey(forHH: employer.id)] = employer.name
             }
         }
-        for org in OrganizationRegistry.all { titlesByID[org.id] = org.name }
+        for org in OrganizationRegistry.available(on: .hh) { titlesByID[org.id] = org.name }
+        for org in OrganizationRegistry.all where org.hhEmployerIDs.isEmpty { titlesByID.removeValue(forKey: org.id) }
         let values = titlesByID.map { VacancyFilterOption(id: $0.key, title: $0.value) }
         return [.init(id: "all", title: "Все работодатели")] + values.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
     }
@@ -207,7 +207,7 @@ final class VacancySearchViewModel: ObservableObject {
 
     func loadPersistenceIfNeeded() async {
         guard !isPersistenceLoaded else { return }
-        do { configuredEmployers = try employerStore.loadOrCreate().employers }
+        do { configuredEmployers = try employerStore.loadOrCreate().employers.filter(OrganizationRegistry.supportsHH) }
         catch { errorMessage = "Не удалось прочитать список работодателей: \(error.localizedDescription)" }
         do {
             if let snapshot = try snapshotStore?.load() {
@@ -286,7 +286,7 @@ final class VacancySearchViewModel: ObservableObject {
             statusMessage = "Ожидание очереди обновления…"
             try await VacancyRefreshScheduler.acquire()
             defer { VacancyRefreshScheduler.release() }
-            let employers = try employerStore.loadOrCreate().employers
+            let employers = try employerStore.loadOrCreate().employers.filter(OrganizationRegistry.supportsHH)
             configuredEmployers = employers
             statusMessage = "Загружается справочник регионов."
             let areaSnapshot = try await areaStore.load(using: apiClient)
