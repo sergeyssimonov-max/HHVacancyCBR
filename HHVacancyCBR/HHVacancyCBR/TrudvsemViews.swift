@@ -59,9 +59,8 @@ struct TrudvsemViews: View {
             if let date = viewModel.updatedAt {
                 Text("Обновлено: \(date.formatted())").accessibilityIdentifier("vacancyUpdateStatus")
             }
-            VacancyStatusMessage(message: viewModel.statusMessage)
+            VacancyStatusMessage(message: viewModel.isLoading ? viewModel.currentEmployerName : viewModel.finalExtractionStatus)
             Spacer()
-            if let progress = viewModel.exportProgress { Text("\(progress.stage): \(progress.completedVacancies) / \(progress.totalVacancies)").layoutPriority(-1) }
             PDFExportCommand(title: viewModel.isExporting ? "Отменить экспорт" : "Все вакансии в PDF") {
                 if viewModel.isExporting { viewModel.cancelExport() } else { viewModel.export(.all) }
             }.disabled(viewModel.displayedResults.isEmpty).accessibilityIdentifier("exportBulkPDFButton")

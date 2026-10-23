@@ -30,6 +30,8 @@ final class VacancySearchViewModel: ObservableObject {
     @Published private(set) var statisticsPDFExportMessage: String?
     @Published private(set) var bulkPDFExportProgress: BulkPDFExportProgress?
     @Published private(set) var errorMessage: String?
+    @Published private(set) var finalExtractionStatus: String?
+    @Published private(set) var currentEmployerName: String?
     @Published private(set) var statusMessage: String?
     @Published private(set) var updatedAtMessage: String?
     @Published private(set) var snapshotWarning: String?
@@ -279,7 +281,7 @@ final class VacancySearchViewModel: ObservableObject {
         isLoading = true
         hasSearched = true
         errorMessage = nil
-        defer { isLoading = false }
+        defer { isLoading = false; currentEmployerName = nil }
         do {
             statusMessage = "Ожидание очереди обновления…"
             try await VacancyRefreshScheduler.acquire()
@@ -291,7 +293,8 @@ final class VacancySearchViewModel: ObservableObject {
             if let warning = areaSnapshot.warning { statusMessage = warning }
             let collector = VacancyCollectionService(client: apiClient, now: currentDate)
             let collection = try await collector.collect(employers: employers, areas: areaSnapshot.index) { [weak self] progress in
-                self?.statusMessage = "\(progress.employerName): загружено \(progress.loadedCount), \(progress.partition)."
+                self?.currentEmployerName = progress.employerName
+                if let summary = progress.finalStatus { self?.finalExtractionStatus = summary }
             }
             try Task.checkCancellation()
             let priorEvidence = Dictionary(uniqueKeysWithValues: results.map { ($0.id, $0.fieldInstitution) })

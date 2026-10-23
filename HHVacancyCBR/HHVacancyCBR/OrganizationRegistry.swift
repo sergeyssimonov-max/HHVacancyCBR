@@ -120,3 +120,9 @@ struct TrudvsemEmployerConfigurationStore: Sendable {
         else { waiters.removeFirst().continuation.resume() }
     }
 }
+
+enum VacancyExtractionStatus {
+    static func summary(employer: String, extracted: Int, expected: Int, pages: Int) -> String {
+        "\(employer): \(extracted) из \(expected), страниц: \(pages)"
+    }
+}

@@ -4,6 +4,7 @@ struct VacancyCollectionProgress: Equatable, Sendable {
     let employerName: String
     let loadedCount: Int
     let partition: String
+    var finalStatus: String? = nil
 }
 
 /// An employer whose vacancies were not read completely: the count differs from
@@ -127,6 +128,7 @@ struct VacancyCollectionService: Sendable {
         var firstError: Error?
         for employer in employers {
             try Task.checkCancellation()
+            await progress(.init(employerName: employer.name, loadedCount: 0, partition: ""))
             let independentFieldAccount = FieldInstitutionClassifier.registry.contains { $0.employerIDs.contains(employer.id) }
             let request = HHVacancySearchRequest(employerID: employer.id, areaID: independentFieldAccount ? "" : "113")
             let initialResponse: HHVacancySearchResponse
@@ -151,10 +153,15 @@ struct VacancyCollectionService: Sendable {
                                     actual: outcome.values.count, failures: outcome.failures))
             }
             await run.recordFinishedEmployer(employer.id, issues: issues)
+            let pages = await run.pageCount(for: employer.id)
+            await progress(.init(employerName: employer.name, loadedCount: outcome.values.count, partition: "",
+                finalStatus: VacancyExtractionStatus.summary(employer: employer.name, extracted: outcome.values.count,
+                    expected: initialResponse.found, pages: pages)))
         }
         // At most two extra pages per refresh, worldwide, using the same pacing/retry budget.
         // Search hits are candidates only; never trust text search as classification evidence.
         if employers.contains(where: { $0.id == "47858" }) {
+            await progress(.init(employerName: "Банк России", loadedCount: 0, partition: ""))
             do {
                 for page in 0..<2 {
                     let response = try await client.searchVacancies(.init(
@@ -449,6 +456,8 @@ private actor CollectionRunClient: HHVacancyAPIClient {
     private let maximumRequests: Int
     private let deadline: TimeInterval
     private let uptime: @Sendable () -> TimeInterval
+    private var pagesByEmployer: [String: Int] = [:]
+    func pageCount(for employerID: String) -> Int { pagesByEmployer[employerID, default: 0] }
     private var requests = 0
     private var values: [String: HHVacancySummary] = [:]
     private var employerValues: [String: Set<String>] = [:]
@@ -475,6 +484,7 @@ private actor CollectionRunClient: HHVacancyAPIClient {
     func searchVacancies(_ request: HHVacancySearchRequest) async throws -> HHVacancySearchResponse {
         try reserve()
         let response = try await client.searchVacancies(request)
+        pagesByEmployer[request.employerID, default: 0] += 1
         try Task.checkCancellation()
         if expected[request.employerID] == nil { expected[request.employerID] = response.found }
         for item in response.items where request.text == nil || FieldInstitutionClassifier.classify(summary: item).isMember {

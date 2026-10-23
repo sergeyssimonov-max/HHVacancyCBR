@@ -36,6 +36,8 @@ final class TrudvsemViewModel: ObservableObject {
     }
     @Published private(set) var isLoading = false
     @Published private(set) var isCancellingSearch = false
+    @Published private(set) var finalExtractionStatus: String?
+    @Published private(set) var currentEmployerName: String?
     @Published private(set) var statusMessage: String?
     @Published private(set) var errorMessage: String?
     @Published private(set) var updatedAt: Date?
@@ -104,15 +106,19 @@ final class TrudvsemViewModel: ObservableObject {
     func refresh() async {
         guard !isLoading else { return }
         isLoading = true; errorMessage = nil
-        defer { isLoading = false }
+        defer { isLoading = false; currentEmployerName = nil }
         do {
             statusMessage = "Ожидание очереди обновления…"
             try await VacancyRefreshScheduler.acquire()
             defer { VacancyRefreshScheduler.release() }
             _ = try employerStore.loadOrCreate()
-            let collection = try await TrudvsemCollectionService(client: client).collect { [weak self] in self?.statusMessage = $0 }
+            let collection = try await TrudvsemCollectionService(client: client).collect { [weak self] in self?.currentEmployerName = $0 }
             try Task.checkCancellation()
             metrics = collection.metrics; collectionIssues = collection.issues
+            if let last = metrics.last, let employer = OrganizationRegistry.all.first(where: { $0.id == last.organizationKey }) {
+                finalExtractionStatus = VacancyExtractionStatus.summary(employer: employer.name, extracted: last.unique,
+                    expected: last.declared, pages: last.pages)
+            }
             guard collection.isComplete else { throw TrudvsemError.incomplete(collection.issues.joined(separator: "\n")) }
             let snapshot = TrudvsemSnapshot(version: 1, vacancies: collection.vacancies, metrics: collection.metrics, updatedAt: Date())
             try Task.checkCancellation()

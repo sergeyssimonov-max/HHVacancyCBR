@@ -99,6 +99,8 @@ struct TrudvsemCollectionService: Sendable {
         let started = Date()
         var all: [TrudvsemVacancy] = [], metrics: [TrudvsemCollection.Metrics] = [], issues: [String] = []
         for organization in organizations {
+            try Task.checkCancellation()
+            await progress(organization.name)
             var pageIndex = 0, received = 0, expected: Int?, values: [String: TrudvsemVacancy] = [:]
             var fingerprints = Set<String>()
             do {
@@ -122,7 +124,6 @@ struct TrudvsemCollectionService: Sendable {
                         value.observationIDs = Array(Set(value.observationIDs + (values[value.id]?.observationIDs ?? []))).sorted()
                         values[value.id] = value
                     }
-                    await progress("\(organization.name): \(values.count) из \(page.total), страниц: \(pageIndex)")
                     if values.count == page.total { break }
                     guard values.count < page.total, !page.vacancies.isEmpty, values.count > priorCount else { throw TrudvsemError.incomplete("Число уникальных вакансий не совпадает с meta.total") }
                 }

@@ -114,12 +114,9 @@ enum VacancySearchViews {
                     Text(updatedAt)
                         .accessibilityIdentifier("vacancyUpdateStatus")
                 }
-                VacancyStatusMessage(message: viewModel.statisticsPDFExportMessage ?? viewModel.statusMessage)
+                VacancyStatusMessage(message: viewModel.isLoading ? viewModel.currentEmployerName : viewModel.finalExtractionStatus)
                 Spacer()
                 Group {
-                    if let progress = viewModel.bulkPDFExportProgress {
-                        Text("\(progress.stage): \(progress.completedVacancies) / \(progress.totalVacancies)").layoutPriority(-1)
-                    }
                     PDFExportCommand(title: bulkExportTitle) {
                         if viewModel.isExportingBulkPDF {
                             viewModel.cancelBulkPDFExport()
@@ -323,16 +320,19 @@ enum DeskPalette {
     static let toolbar = Color(nsColor: .windowBackgroundColor)
 }
 
-/// Suppresses summaries already represented by the vacancy counters.
+/// Displays only the dedicated extraction status supplied by the view model.
 struct VacancyStatusMessage: View {
     let message: String?
 
     var body: some View {
-        if let message, !message.hasPrefix("Готово"), !message.hasPrefix("Показана сохранённая") {
+        if let message {
             Text(message)
                 .truncationMode(.tail)
                 .help(message)
-                .layoutPriority(-1)
+                .fixedSize(horizontal: true, vertical: false)
+                .layoutPriority(1)
+                .accessibilityLabel(message)
+                .accessibilityIdentifier("vacancyExtractionStatus")
         }
     }
 }

@@ -33,6 +33,13 @@ final class HHVacancyCBRTests: XCTestCase {
         VacancyRefreshScheduler.release()
     }
 
+    func testExtractionStatusUsesExactRequestedFormat() {
+        XCTAssertEqual(VacancyExtractionStatus.summary(employer: "РНПК", extracted: 0, expected: 0, pages: 1),
+                       "РНПК: 0 из 0, страниц: 1")
+        XCTAssertEqual(VacancyExtractionStatus.summary(employer: "Банк России", extracted: 120, expected: 120, pages: 2),
+                       "Банк России: 120 из 120, страниц: 2")
+    }
+
     private func fieldSummary(_ title: String, id: String = "field", employer: String = "47858", description: String? = nil,
                               area: HHArea = .init(id: "1", name: "Москва")) -> HHVacancySummary {
         .init(id: id, name: title, employer: .init(name: "Банк России", id: employer), salary: nil,
@@ -1160,7 +1167,10 @@ final class HHVacancyCBRTests: XCTestCase {
         let clock = AuditClock()
         let result = try await VacancyCollectionService(client: client, maximumDuration: 10, uptime: { clock.now }).collect(
             employers: [.init(id: "1", name: "One", comment: "test")],
-            areas: try AreaDirectoryIndex(root: Self.areaTree), progress: { _ in clock.advance(10) })
+            areas: try AreaDirectoryIndex(root: Self.areaTree), progress: { progress in
+                // Advance after data arrives, not on the new pre-request employer notification.
+                if progress.loadedCount > 0 { clock.advance(10) }
+            })
         XCTAssertEqual(result.vacancies.count, 100)
         XCTAssertFalse(result.isComplete)
         let requests = await client.requestedEmployerIDs.count

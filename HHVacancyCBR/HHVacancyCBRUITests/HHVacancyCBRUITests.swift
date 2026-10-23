@@ -23,6 +23,11 @@ final class HHVacancyCBRUITests: XCTestCase {
         XCTAssertFalse(app.buttons["searchVacanciesButton"].exists)
         app.buttons["refreshTrudvsemButton"].click()
         XCTAssertTrue(app.staticTexts["Администратор баз данных"].waitForExistence(timeout: 8))
+        let finalStatus = app.staticTexts["vacancyExtractionStatus"]
+        XCTAssertTrue(finalStatus.waitForExistence(timeout: 8))
+        let statusText = finalStatus.value as? String ?? finalStatus.label
+        XCTAssertNotNil(statusText.range(of: "^.*: [0-9]+ из [0-9]+, страниц: [0-9]+$", options: .regularExpression), statusText)
+        XCTAssertFalse(app.staticTexts["PDF сохранён."].exists)
         choose("НСИС", from: "employerFilterPicker", in: app)
         app.radioButtons["hh.ru"].click()
         XCTAssertTrue(app.staticTexts["vacancyTitle.ui-1"].exists)
