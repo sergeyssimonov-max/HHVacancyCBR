@@ -81,7 +81,6 @@ fi
 stage="$work/dmg"
 mkdir "$stage"
 ditto "$app" "$stage/ЦБВакансии.app"
-cp HHVacancyCBR/HHVacancyCBR/Vendor/Streebog/LICENSE "$stage/Streebog-LICENSE.txt"
 ln -s /Applications "$stage/Applications"
 cat > "$stage/README.txt" <<EOF
 ЦБВакансии $version ($build)

@@ -2443,6 +2443,67 @@ final class HHVacancyCBRTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testHHSearchUsesSnippetAndLoadedDescriptionOnlyAfterSubmit() async throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = VacancySnapshotStore(fileURL: directory.appendingPathComponent("snapshot.json"))
+        let row = statisticsVacancy(id: "search", date: "2026-09-01T10:00:00Z")
+        let summary = HHVacancySummary(id: row.id, name: row.name, employer: row.summary.employer,
+            salary: nil, area: row.summary.area, alternateURL: nil, url: nil,
+            snippet: .init(requirement: "Требуется аналитик данных", responsibility: nil),
+            publishedAt: row.summary.publishedAt)
+        let value = VacancySearchResult(id: row.id, summary: summary,
+            details: .init(id: row.id, name: row.name, employer: row.summary.employer,
+                area: row.summary.area, salary: nil, alternateURL: nil,
+                description: "<p>Управление рисками</p>"),
+            location: row.location, isDetailLoaded: true)
+        try store.save(.init(values: [value], issues: [], updatedAt: Date()))
+        let model = VacancySearchViewModel(apiClient: FixedSummaryAPIClient(rows: []),
+            employerStore: TestEmployerStore(entries: [.init(id: "47858", name: "Банк России", comment: "test")]),
+            areaStore: AreaDirectoryStore(fileURL: directory.appendingPathComponent("areas.json")), snapshotStore: store)
+        await model.loadPersistenceIfNeeded()
+        model.searchDraft = "рисками"
+        XCTAssertEqual(model.displayedResults.count, 1)
+        model.applySearch()
+        XCTAssertEqual(model.displayedResults.map(\.id), ["search"])
+        model.searchDraft = "аналитик данных"
+        model.applySearch()
+        XCTAssertEqual(model.displayedResults.map(\.id), ["search"])
+        model.searchDraft = "отсутствующее слово"
+        model.applySearch()
+        XCTAssertTrue(model.displayedResults.isEmpty)
+        model.clearSearch()
+        XCTAssertEqual(model.displayedResults.map(\.id), ["search"])
+    }
+
+    @MainActor
+    func testTrudSearchFindsDescriptionAndKeepsNewestFirst() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = TrudvsemSnapshotStore(configuredURL: directory.appendingPathComponent("trud.json"))
+        var old = TrudFixture.row("old"), newest = TrudFixture.row("new")
+        var oldData = try XCTUnwrap(old["vacancy"] as? [String: Any])
+        var newData = try XCTUnwrap(newest["vacancy"] as? [String: Any])
+        oldData["creation-date"] = "2026-09-01"
+        newData["creation-date"] = "2026-10-01"
+        oldData["duty"] = "Подготовка отчётов"
+        newData["duty"] = "Подготовка отчётов"
+        old["vacancy"] = oldData; newest["vacancy"] = newData
+        let values = try TrudFixture.page([old, newest]).vacancies.map {
+            TrudvsemVacancy(dto: $0, organization: TrudFixture.bank, observationIDs: [])
+        }
+        try store.save(.init(version: 1, vacancies: values, metrics: [], updatedAt: Date()))
+        let model = TrudvsemViewModel(client: TrudScriptedClient([]), store: store)
+        model.load()
+        model.searchDraft = "отчётов"
+        XCTAssertEqual(model.displayedResults.count, 2)
+        model.applySearch()
+        XCTAssertEqual(model.displayedResults.map(\.dto.id), ["new", "old"])
+        model.clearSearch()
+        XCTAssertEqual(model.displayedResults.map(\.dto.id), ["new", "old"])
+    }
+
     func testPublicationDateParserPreservesOffsetsFractionsAndMissingValues() throws {
         let parser = HHPublicationDateParser()
         let whole = try XCTUnwrap(parser.date(from: "2026-09-01T10:00:00Z"))
@@ -3391,6 +3452,18 @@ final class PDFSourceEvidenceTests: XCTestCase {
         XCTAssertEqual(try MaterialHash.digest(Data("abc".utf8), algorithm: "SHA-256"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
         XCTAssertThrowsError(try MaterialHash.digest(first, algorithm: "unknown"))
     }
+    func testOldEvidenceRemainsAfterNewCapture() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = PDFSourceEvidence(root: root)
+        let url = URL(string: "https://api.hh.ru/vacancies/42")!
+        let bytes = Data(#"{"id":"42"}"#.utf8)
+        let old = try XCTUnwrap(store.capture(data: bytes, url: url, status: 200, sent: Date(), received: Date()))
+        let folder = root.appendingPathComponent("observations/" + old.id)
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1)], ofItemAtPath: folder.path)
+        _ = try store.capture(data: bytes, url: url, status: 200, sent: Date(), received: Date())
+        XCTAssertEqual(try store.observation(old.id).id, old.id)
+    }
     func testSourceReceiptAppendOnlyAndOriginalBytes() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -3473,6 +3546,35 @@ private actor TrudScriptedClient: TrudvsemAPI {
 }
 
 extension HHVacancyCBRTests {
+    func testTrudDescriptionAndSalaryAreHumanReadable() throws {
+        var row = TrudFixture.row("format")
+        var vacancy = try XCTUnwrap(row["vacancy"] as? [String: Any])
+        vacancy["requirement"] = ["education": "Общее образование", "experience": 1, "code": 42]
+        vacancy["salary"] = 60000
+        vacancy.removeValue(forKey: "salary_min")
+        row["vacancy"] = vacancy
+        let dto = try XCTUnwrap(TrudFixture.page([row]).vacancies.first)
+        let value = TrudvsemVacancy(dto: dto, organization: TrudFixture.bank, observationIDs: [])
+        let html = TrudvsemDescriptionFormatter.html(for: value)
+        XCTAssertTrue(html.contains("Образование: Общее образование"))
+        XCTAssertTrue(html.contains("Опыт работы: 1 год"))
+        XCTAssertFalse(html.contains("education:"))
+        XCTAssertFalse(html.contains("experience:"))
+        XCTAssertFalse(html.contains("42"))
+        XCTAssertEqual(value.salary, "60 000 руб.")
+    }
+
+    func testTrudSalaryBoundsMatchHHFormat() throws {
+        var row = TrudFixture.row("salary")
+        var vacancy = try XCTUnwrap(row["vacancy"] as? [String: Any])
+        vacancy["salary_min"] = 60000
+        vacancy["salary_max"] = 90000
+        row["vacancy"] = vacancy
+        let dto = try XCTUnwrap(TrudFixture.page([row]).vacancies.first)
+        XCTAssertEqual(TrudvsemVacancy(dto: dto, organization: TrudFixture.bank, observationIDs: []).salary,
+                       HHSalary(from: 60000, to: 90000, currency: "RUR", gross: nil).displayText)
+    }
+
     func testCanonicalSixOrganizationsAndSafeUnknownHHProfile() {
         XCTAssertEqual(OrganizationRegistry.all.map(\.id), ["bank_of_russia", "rosinkas", "nspk", "rnpk", "nsis", "uk_fkbs"])
         XCTAssertEqual(Set(OrganizationRegistry.all.map(\.inn)).count, 6)

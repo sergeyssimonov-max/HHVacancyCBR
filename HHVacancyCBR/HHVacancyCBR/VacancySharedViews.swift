@@ -107,3 +107,43 @@ struct VacancyRefreshButton: View {
         .frame(width: 120, height: 32)
     }
 }
+
+@MainActor
+struct VacancySearchBar: View {
+    @Binding var text: String
+    let submit: @MainActor () -> Void
+    let clear: @MainActor () -> Void
+
+    var body: some View {
+        HStack(spacing: 14) {
+            HStack(spacing: 4) {
+                TextField("Поиск в названии и доступном описании", text: $text)
+                    .textFieldStyle(.plain)
+                    .onSubmit { submit() }
+                    .accessibilityIdentifier("vacancySearchField")
+                if !text.isEmpty {
+                    Button { clear() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary.opacity(0.65))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Очистить поиск")
+                    .accessibilityIdentifier("clearVacancySearch")
+                }
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 32)
+            .background(RoundedRectangle(cornerRadius: 7).fill(Color(nsColor: .controlBackgroundColor)))
+            .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color.secondary.opacity(0.35)))
+            Button("Искать") { submit() }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .frame(width: 120, height: 32)
+                .accessibilityIdentifier("submitVacancySearch")
+        }
+        .controlSize(.large)
+        .padding(.horizontal, 28)
+        .padding(.vertical, 10)
+        .background(DeskPalette.toolbar)
+    }
+}

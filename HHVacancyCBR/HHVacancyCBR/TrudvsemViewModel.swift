@@ -27,8 +27,6 @@ struct TrudvsemSnapshotStore: Sendable {
     }
 }
 
-enum VacancySort: String, CaseIterable { case newest = "Сначала новые", title = "По названию" }
-
 @MainActor
 final class TrudvsemViewModel: ObservableObject {
     @Published private(set) var results: [TrudvsemVacancy] = [] {
@@ -45,7 +43,10 @@ final class TrudvsemViewModel: ObservableObject {
     @Published var selectedEmployerID = "all" { didSet { displayedCache = nil } }
     @Published var selectedRegionID = "all" { didSet { displayedCache = nil } }
     @Published var fieldInstitutionsOnly = false { didSet { displayedCache = nil } }
-    @Published var sort: VacancySort = .newest { didSet { displayedCache = nil } }
+    @Published var searchDraft = ""
+    @Published private(set) var searchText = "" { didSet { displayedCache = nil } }
+    func applySearch() { searchText = searchDraft.trimmingCharacters(in: .whitespacesAndNewlines) }
+    func clearSearch() { searchDraft = ""; searchText = "" }
     @Published var expandedID: String?
     @Published private(set) var isExporting = false
     @Published private(set) var exportProgress: BulkPDFExportProgress?
@@ -66,10 +67,11 @@ final class TrudvsemViewModel: ObservableObject {
         if let displayedCache { return displayedCache }
         let filtered = results.filter { (selectedEmployerID == "all" || $0.organizationKey == selectedEmployerID)
             && (selectedRegionID == "all" || $0.regionID == selectedRegionID)
-            && (!fieldInstitutionsOnly || $0.fieldInstitution.isMember) }
+            && (!fieldInstitutionsOnly || $0.fieldInstitution.isMember)
+            && (searchText.isEmpty || ($0.title + " " + TrudvsemDescriptionFormatter.searchableText(for: $0)).localizedCaseInsensitiveContains(searchText)) }
         // Parse each date once, rather than repeatedly inside O(n log n) comparisons.
-        let sorted = filtered.map { (value: $0, date: sort == .newest ? $0.createdDate : nil) }.sorted {
-            if sort == .newest, $0.date != $1.date { return ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
+        let sorted = filtered.map { (value: $0, date: $0.createdDate) }.sorted {
+            if $0.date != $1.date { return ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
             if $0.value.title == $1.value.title { return $0.value.id < $1.value.id }
             return $0.value.title < $1.value.title
         }.map(\.value)
@@ -88,7 +90,7 @@ final class TrudvsemViewModel: ObservableObject {
     }
     var filters: [String: String] { ["Организация": OrganizationRegistry.all.first { $0.id == selectedEmployerID }?.name ?? "Все организации",
         "Регион": regions.first { $0.id == selectedRegionID }?.title ?? selectedRegionID,
-        "Категория": fieldInstitutionsOnly ? "Полевые учреждения" : "Все вакансии", "Сортировка": sort.rawValue] }
+        "Категория": fieldInstitutionsOnly ? "Полевые учреждения" : "Все вакансии", "Сортировка": "Сначала новые"] }
     func load() {
         guard !loaded else { return }; loaded = true
         do { _ = try employerStore.loadOrCreate(); if let snapshot = try store.load() { results = snapshot.vacancies.filter { value in OrganizationRegistry.available(on: .trudvsem).contains { $0.id == value.organizationKey } }; updatedAt = snapshot.updatedAt; metrics = snapshot.metrics; statusMessage = "Показана сохранённая полная выборка." } }

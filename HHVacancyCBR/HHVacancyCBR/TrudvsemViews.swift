@@ -6,13 +6,14 @@ struct TrudvsemViews: View {
     var body: some View {
         VStack(spacing: 0) {
             toolbar
+            VacancySearchBar(text: $viewModel.searchDraft, submit: viewModel.applySearch, clear: viewModel.clearSearch)
             Divider()
             statusBar
             Divider()
             if let error = viewModel.errorMessage { Text(error).font(.caption).foregroundColor(.red).padding(8).textSelection(.enabled) }
-            if viewModel.results.isEmpty {
+            if viewModel.displayedResults.isEmpty {
                 VacancyEmptyState(
-                    message: viewModel.updatedAt == nil ? "Загрузите вакансии trudvsem.ru кнопкой «Обновить»." : "Вакансий не найдено.",
+                    message: viewModel.updatedAt == nil ? "Загрузите вакансии trudvsem.ru кнопкой «Обновить»." : (viewModel.results.isEmpty ? "Вакансий не найдено." : "По запросу вакансий нет."),
                     isLoading: viewModel.isLoading)
             } else {
                 ScrollView {
@@ -94,13 +95,32 @@ struct TrudvsemViews: View {
     }
 }
 
-private enum TrudvsemDescriptionFormatter {
+enum TrudvsemDescriptionFormatter {
+    static func searchableText(for value: TrudvsemVacancy) -> String {
+        html(for: value).readableHTMLText
+    }
     static func html(for value: TrudvsemVacancy) -> String {
         let keys = ["duty", "requirement", "requirements", "qualification", "education", "experience", "schedule", "employment", "term", "social_protected"]
         return keys.compactMap { key -> String? in
-            let text = value.dto.raw[key].readable
-            guard value.dto.raw[key] != .null, !text.isEmpty else { return nil }
-            return "<h3>\(TrudvsemPDFFormatter.labels[key] ?? key)</h3>\(text)"
+            let raw = value.dto.raw[key]
+            let text: String
+            if key == "requirement", let fields = raw.fields {
+                let education = fields["education"]?.text?.nilIfBlank
+                let experience = fields["experience"]?.number.flatMap { years -> String? in
+                    guard years > 0, years < 100, years.rounded() == years else { return nil }
+                    let n = Int(years), last = n % 10, lastTwo = n % 100
+                    let unit = (11...14).contains(lastTwo) ? "лет" : (last == 1 ? "год" : ((2...4).contains(last) ? "года" : "лет"))
+                    return "Опыт работы: \(n) \(unit)."
+                }
+                text = [education.map { "Образование: \($0)." }, experience].compactMap { $0 }.joined(separator: " ")
+            } else if raw.fields != nil {
+                text = ["name", "title", "description"].compactMap { raw[$0].text }.joined(separator: ". ")
+            } else {
+                text = raw.readable
+            }
+            guard !text.isEmpty, text.rangeOfCharacter(from: .letters) != nil else { return nil }
+            let escaped = text.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
+            return "<h3>\(TrudvsemPDFFormatter.labels[key] ?? "Сведения")</h3><p>\(escaped)</p>"
         }.joined(separator: "\n")
     }
 }

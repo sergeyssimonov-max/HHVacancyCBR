@@ -39,8 +39,10 @@ final class VacancySearchViewModel: ObservableObject {
     @Published private(set) var hasSearched = false
     @Published private(set) var isCancellingSearch = false
     @Published private(set) var isCancellingBulkPDFExport = false
-    @Published var searchText = "" { didSet { displayedCache = nil } }
-    @Published var sort: VacancySort = .newest { didSet { displayedCache = nil } }
+    @Published var searchDraft = ""
+    @Published private(set) var searchText = "" { didSet { displayedCache = nil } }
+    func applySearch() { searchText = searchDraft.trimmingCharacters(in: .whitespacesAndNewlines) }
+    func clearSearch() { searchDraft = ""; searchText = "" }
     @Published var fieldInstitutionsOnly = false { didSet { displayedCache = nil; reconcileExpanded() } }
     @Published var selectedEmployerID = "all" { didSet { displayedCache = nil; reconcileExpanded() } }
     @Published var selectedRegionID = "all" { didSet { displayedCache = nil; reconcileExpanded() } }
@@ -199,12 +201,12 @@ final class VacancySearchViewModel: ObservableObject {
     var displayedResults: [VacancySearchResult] {
         if let displayedCache { return displayedCache }
         let filtered = unfilteredResults.filter {
-            (searchText.isEmpty || ($0.name + " " + ($0.plainTextDescription ?? "")).localizedCaseInsensitiveContains(searchText))
+            (searchText.isEmpty || ($0.name + " " + ($0.summary.snippet?.plainText ?? "") + " " + ($0.plainTextDescription ?? "")).localizedCaseInsensitiveContains(searchText))
                 && (!fieldInstitutionsOnly || $0.isFieldInstitution)
                 && (selectedEmployerID == "all" || organizationKey(forHH: $0.employerID ?? "") == selectedEmployerID)
                 && (selectedRegionID == "all" || $0.location.filterID == selectedRegionID)
         }
-        let value = sort == .newest ? orderedNewestFirst(filtered) : filtered.sorted { $0.name == $1.name ? $0.id < $1.id : $0.name < $1.name }
+        let value = orderedNewestFirst(filtered)
         displayedCache = value
         return value
     }
@@ -513,7 +515,7 @@ final class VacancySearchViewModel: ObservableObject {
         defer { isExportingBulkPDF = false; bulkPDFExportProgress = nil }
         // Freeze local rows and membership before enrichment can suspend this actor.
         let snapshot = displayedResults
-        let filters = statisticsReportSnapshot().documentContext.filters.merging(["Сортировка": sort.rawValue]) { _, new in new }
+        let filters = statisticsReportSnapshot().documentContext.filters.merging(["Сортировка": "Сначала новые"]) { _, new in new }
         do {
             var values: [VacancySearchResult] = []
             for (index, source) in snapshot.enumerated() {

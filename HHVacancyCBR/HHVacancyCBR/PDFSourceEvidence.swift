@@ -78,7 +78,6 @@ final class PDFSourceEvidence: @unchecked Sendable {
     static let shared = PDFSourceEvidence()
     private let configuredRoot: URL?
     private let lock = NSRecursiveLock()
-    private var lastPrunedAt = Date.distantPast
     init(root: URL? = nil) { configuredRoot = root }
     var root: URL { get throws {
         if let configuredRoot { return configuredRoot }
@@ -113,10 +112,6 @@ final class PDFSourceEvidence: @unchecked Sendable {
     @discardableResult
     func capture(data: Data, url: URL, status: Int, sent: Date, received: Date) throws -> APIObservation? {
         lock.lock(); defer { lock.unlock() }
-        if Date().timeIntervalSince(lastPrunedAt) > 3600 {
-            try? pruneExpiredResponses()
-            lastPrunedAt = Date()
-        }
         let source: VacancySource
         if url.host == "api.hh.ru", url.path == "/vacancies" || url.path.hasPrefix("/vacancies/") { source = .hh }
         else if url.host == "opendata.trudvsem.ru", url.path.hasPrefix("/api/v1/vacancies/") { source = .trudvsem }
@@ -154,27 +149,6 @@ final class PDFSourceEvidence: @unchecked Sendable {
         }
         return observation
     }
-    /// Bound disk usage independently of successful searches and both source tabs.
-    /// Older documents can still export with an explicit missing-material warning.
-    private func pruneExpiredResponses() throws {
-        let parent = try directory("observations")
-        let entries = try FileManager.default.contentsOfDirectory(at: parent,
-            includingPropertiesForKeys: [.contentModificationDateKey], options: [.skipsHiddenFiles])
-        var records: [(URL, Date, Int)] = []
-        for folder in entries where UUID(uuidString: folder.lastPathComponent) != nil {
-            let date = try folder.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate ?? .distantPast
-            let files = ["response.json", "observation.json"].map { folder.appendingPathComponent($0) }
-            let size = files.reduce(0) { $0 + ((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
-            records.append((folder, date, size))
-        }
-        var total = records.reduce(0) { $0 + $1.2 }
-        let cutoff = Date().addingTimeInterval(-30 * 86400)
-        for record in records.sorted(by: { $0.1 < $1.1 }) where record.1 < cutoff || total > 512 * 1024 * 1024 {
-            try FileManager.default.removeItem(at: record.0)
-            total -= record.2
-        }
-    }
-
     func observation(_ id: String) throws -> APIObservation {
         try validatedObservation(id).record
     }

@@ -98,13 +98,21 @@ struct TrudvsemVacancy: Codable, Identifiable, Equatable, Sendable {
     var regionID: String { dto.raw["region"]["region_code"].text ?? "unknown" }
     var region: String { dto.raw["region"]["name"].text ?? "Регион не указан" }
     var salary: String? {
-        if let text = dto.raw["salary"].text { return text }
-        let lower = dto.raw["salary_min"].number.map { "от " + String(format: "%.0f", $0) }
-        let upper = dto.raw["salary_max"].number.map { "до " + String(format: "%.0f", $0) }
-        let bounds = [lower, upper].compactMap { $0 }
-        guard !bounds.isEmpty else { return nil }
-        return (bounds + [dto.raw["currency"].text].compactMap { $0 }).joined(separator: " ")
+        func amount(_ value: SourceJSONValue) -> Int? {
+            guard let number = value.number, number >= 0, number < Double(Int.max) else { return nil }
+            return Int(number.rounded())
+        }
+        let lower = amount(dto.raw["salary_min"])
+        let upper = amount(dto.raw["salary_max"])
+        let single = amount(dto.raw["salary"])
+        if lower != nil || upper != nil || single != nil {
+            return HHSalary(from: lower ?? (upper == nil ? single : nil), to: upper,
+                            currency: dto.raw["currency"].text ?? "RUR", gross: nil).displayText
+                .map { single != nil && lower == nil && upper == nil ? $0.replacingOccurrences(of: "от ", with: "", options: .anchored) : $0 }
+        }
+        return dto.raw["salary"].text
     }
+
     var created: String? { dto.raw["creation-date"].text }
     var createdDate: Date? {
         guard let created else { return nil }

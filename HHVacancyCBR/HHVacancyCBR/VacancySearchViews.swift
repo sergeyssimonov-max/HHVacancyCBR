@@ -15,13 +15,7 @@ enum VacancySearchViews {
         var body: some View {
             VStack(spacing: 0) {
                 toolbar
-                HStack {
-                    TextField("Поиск в названии и описании", text: $viewModel.searchText)
-                        .textFieldStyle(.roundedBorder)
-                    Picker("Сортировка", selection: $viewModel.sort) {
-                        ForEach(VacancySort.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                    }.frame(width: 230)
-                }.padding(.horizontal, 20).padding(.vertical, 8)
+                VacancySearchBar(text: $viewModel.searchDraft, submit: viewModel.applySearch, clear: viewModel.clearSearch)
                 Divider()
                 statusBar
                 Divider()
