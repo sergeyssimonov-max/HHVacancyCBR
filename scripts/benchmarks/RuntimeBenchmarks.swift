@@ -14,6 +14,10 @@ struct RuntimeBenchmarks {
         defer { try? FileManager.default.removeItem(at: directory) }
         // Synthetic benchmark receipts are isolated from the user's production archive.
         setenv("XCTestConfigurationFilePath", "benchmark", 1)
+        if mode == "reliability" {
+            try await ReliabilityChecks.run(directory: directory)
+            return
+        }
         let values = (0..<count).map { vacancy($0, paragraphs: mode == "stress" ? 1200 : 12) }
         let start = ProcessInfo.processInfo.systemUptime
         var before = rusage()

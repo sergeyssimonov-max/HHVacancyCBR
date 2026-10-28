@@ -19,7 +19,7 @@ final class VacancySearchViewModel: ObservableObject {
     static let searchCacheTTL: TimeInterval = 10 * 60
     private static let publicationDateParser = HHPublicationDateParser()
 
-    @Published private(set) var results: [VacancySearchResult] = []
+    @Published private(set) var results: [VacancySearchResult] = [] { didSet { displayedCache = nil } }
     @Published private(set) var configuredEmployers: [EmployerConfigurationEntry] = []
     @Published private(set) var expandedVacancyID: String?
     @Published private(set) var isLoading = false
@@ -30,7 +30,6 @@ final class VacancySearchViewModel: ObservableObject {
     @Published private(set) var statisticsPDFExportMessage: String?
     @Published private(set) var bulkPDFExportProgress: BulkPDFExportProgress?
     @Published private(set) var errorMessage: String?
-    @Published private(set) var finalExtractionStatus: String?
     @Published private(set) var currentEmployerName: String?
     @Published private(set) var statusMessage: String?
     @Published private(set) var updatedAtMessage: String?
@@ -40,10 +39,11 @@ final class VacancySearchViewModel: ObservableObject {
     @Published private(set) var hasSearched = false
     @Published private(set) var isCancellingSearch = false
     @Published private(set) var isCancellingBulkPDFExport = false
-    @Published var sort: VacancySort = .newest
-    @Published var fieldInstitutionsOnly = false { didSet { reconcileExpanded() } }
-    @Published var selectedEmployerID = "all" { didSet { reconcileExpanded() } }
-    @Published var selectedRegionID = "all" { didSet { reconcileExpanded() } }
+    @Published var searchText = "" { didSet { displayedCache = nil } }
+    @Published var sort: VacancySort = .newest { didSet { displayedCache = nil } }
+    @Published var fieldInstitutionsOnly = false { didSet { displayedCache = nil; reconcileExpanded() } }
+    @Published var selectedEmployerID = "all" { didSet { displayedCache = nil; reconcileExpanded() } }
+    @Published var selectedRegionID = "all" { didSet { displayedCache = nil; reconcileExpanded() } }
 
     private let apiClient: any HHVacancyAPIClient
     private let employerStore: any EmployerConfigurationStoring
@@ -52,6 +52,8 @@ final class VacancySearchViewModel: ObservableObject {
     private let bulkPDFExporter: any VacanciesPDFExporting
     private let statisticsPDFDestination: @MainActor (String) -> URL?
     private let currentDate: @Sendable () -> Date
+    private var displayedCache: [VacancySearchResult]?
+    private var snapshotSaveTask: Task<Void, Never>?
     private var detailsCache: [String: HHVacancyDetails] = [:]
     private var cache: VacancySearchCache?
     private var detailTask: Task<Void, Never>?
@@ -144,7 +146,7 @@ final class VacancySearchViewModel: ObservableObject {
         !isLoading && !isExportingBulkPDF && !isExportingStatisticsPDF && !isExportingPersonalPDF
             && !displayedResults.isEmpty
     }
-    var displayedVacancyCountMessage: String { "Показано вакансий: \(displayedResults.count)" }
+    var displayedVacancyCountMessage: String { VacancyDisplayFormat.vacancyCount(displayedResults.count) }
 
     var emptyResultsMessage: String {
         if selectedEmployerID != "all",
@@ -195,12 +197,16 @@ final class VacancySearchViewModel: ObservableObject {
     }
 
     var displayedResults: [VacancySearchResult] {
+        if let displayedCache { return displayedCache }
         let filtered = unfilteredResults.filter {
-            (!fieldInstitutionsOnly || $0.isFieldInstitution)
+            (searchText.isEmpty || ($0.name + " " + ($0.plainTextDescription ?? "")).localizedCaseInsensitiveContains(searchText))
+                && (!fieldInstitutionsOnly || $0.isFieldInstitution)
                 && (selectedEmployerID == "all" || organizationKey(forHH: $0.employerID ?? "") == selectedEmployerID)
                 && (selectedRegionID == "all" || $0.location.filterID == selectedRegionID)
         }
-        return sort == .newest ? orderedNewestFirst(filtered) : filtered.sorted { $0.name == $1.name ? $0.id < $1.id : $0.name < $1.name }
+        let value = sort == .newest ? orderedNewestFirst(filtered) : filtered.sorted { $0.name == $1.name ? $0.id < $1.id : $0.name < $1.name }
+        displayedCache = value
+        return value
     }
 
     private var unfilteredResults: [VacancySearchResult] { results }
@@ -210,7 +216,8 @@ final class VacancySearchViewModel: ObservableObject {
         do { configuredEmployers = try employerStore.loadOrCreate().employers.filter(OrganizationRegistry.supportsHH) }
         catch { errorMessage = "Не удалось прочитать список работодателей: \(error.localizedDescription)" }
         do {
-            if let snapshot = try snapshotStore?.load() {
+            let store = snapshotStore
+            if let snapshot = try await Task.detached(operation: { try store?.load() }).value {
                 results = orderedNewestFirst(snapshot.results)
                 cache = VacancySearchCache(values: results, updatedAt: snapshot.updatedAt, issues: snapshot.issues)
                 updatedAtMessage = timeMessage(snapshot.updatedAt)
@@ -294,10 +301,9 @@ final class VacancySearchViewModel: ObservableObject {
             let collector = VacancyCollectionService(client: apiClient, now: currentDate)
             let collection = try await collector.collect(employers: employers, areas: areaSnapshot.index) { [weak self] progress in
                 self?.currentEmployerName = progress.employerName
-                if let summary = progress.finalStatus { self?.finalExtractionStatus = summary }
             }
             try Task.checkCancellation()
-            let priorEvidence = Dictionary(uniqueKeysWithValues: results.map { ($0.id, $0.fieldInstitution) })
+            let priorEvidence = Dictionary(results.map { ($0.id, $0.fieldInstitution) }, uniquingKeysWith: { first, _ in first })
             let values = orderedNewestFirst(collection.vacancies.map { summary -> VacancySearchResult in
                 var summary = summary
                 summary.fieldInstitutionEvidence = priorEvidence[summary.id] ?? nil
@@ -454,9 +460,17 @@ final class VacancySearchViewModel: ObservableObject {
         results[index] = value
         if let previous = cache {
             cache = VacancySearchCache(values: results, updatedAt: previous.updatedAt, issues: previous.issues)
-            do {
-                try snapshotStore?.save(VacancySnapshot(values: results, issues: previous.issues, updatedAt: previous.updatedAt))
-            } catch { snapshotWarning = "Не удалось сохранить уточнённую категорию вакансии." }
+            let snapshot = VacancySnapshot(values: results, issues: previous.issues, updatedAt: previous.updatedAt)
+            snapshotSaveTask?.cancel()
+            let store = snapshotStore
+            snapshotSaveTask = Task { [weak self] in
+                do {
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                    try await Task.detached { try store?.save(snapshot) }.value
+                } catch is CancellationError {} catch {
+                    self?.snapshotWarning = "Не удалось сохранить описание: \(error.localizedDescription)"
+                }
+            }
         }
         statusMessage = "Описание вакансии загружено."
     }

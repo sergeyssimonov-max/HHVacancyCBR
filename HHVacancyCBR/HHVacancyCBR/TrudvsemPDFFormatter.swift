@@ -29,7 +29,7 @@ enum TrudvsemPDFFormatter {
             builder.field(label, value.readable.nilIfBlank)
         }
     }
-    static func personal(_ vacancy: TrudvsemVacancy) -> PDFVacancySnapshot {
+    static func personal(_ vacancy: TrudvsemVacancy, records: [APIObservation]? = nil) -> PDFVacancySnapshot {
         let b = VacancyPDFDocumentBuilder(), c = vacancy.context
         b.documentHeader(c); b.title(vacancy.title)
         b.field("Основная организация", vacancy.organization?.legalName)
@@ -38,7 +38,7 @@ enum TrudvsemPDFFormatter {
             b.field("Категория", "Полевые учреждения"); b.field("Основание", vacancy.fieldInstitution.reason)
         }
         for key in (vacancy.dto.raw.fields ?? [:]).keys.sorted() { append(vacancy.dto.raw[key], key: key, to: b) }
-        b.sourceEvidence(c); b.identify(c)
+        b.sourceEvidence(c, records: records); b.identify(c)
         return .init(context: c, document: b.document)
     }
     static func statistics(_ values: [TrudvsemVacancy], filters: [String: String]) -> PDFVacancySnapshot {

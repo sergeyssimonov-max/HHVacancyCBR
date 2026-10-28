@@ -15,6 +15,13 @@ enum VacancySearchViews {
         var body: some View {
             VStack(spacing: 0) {
                 toolbar
+                HStack {
+                    TextField("Поиск в названии и описании", text: $viewModel.searchText)
+                        .textFieldStyle(.roundedBorder)
+                    Picker("Сортировка", selection: $viewModel.sort) {
+                        ForEach(VacancySort.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    }.frame(width: 230)
+                }.padding(.horizontal, 20).padding(.vertical, 8)
                 Divider()
                 statusBar
                 Divider()
@@ -91,14 +98,13 @@ enum VacancySearchViews {
 
         @ViewBuilder private var content: some View {
             if viewModel.isLoading && viewModel.displayedResults.isEmpty {
-                VStack(spacing: 12) { ProgressView(); Text("Загружаем вакансии всех настроенных работодателей…") }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VacancyEmptyState(message: "Загружаем вакансии всех настроенных работодателей…", isLoading: true)
             } else if let error = viewModel.errorMessage, viewModel.displayedResults.isEmpty {
-                empty(title: "Не удалось загрузить вакансии", message: error, action: "Повторить")
+                empty(title: "Не удалось загрузить вакансии", message: error)
             } else if viewModel.hasSearched && viewModel.displayedResults.isEmpty {
-                empty(title: "Вакансий не найдено", message: viewModel.emptyResultsMessage, action: "Обновить")
+                empty(title: "Вакансий не найдено", message: viewModel.emptyResultsMessage)
             } else if !viewModel.hasSearched && viewModel.displayedResults.isEmpty {
-                empty(title: "ЦБВакансии", message: "Загрузите открытые вакансии настроенных работодателей периметра Банка России по всей России.", action: "Обновить")
+                VacancyEmptyState(message: "Загрузите вакансии hh.ru кнопкой «Обновить».")
             } else {
                 results
             }
@@ -106,15 +112,11 @@ enum VacancySearchViews {
 
         private var statusBar: some View {
             HStack(spacing: 12) {
-                Text(viewModel.displayedVacancyCountMessage)
-                    .accessibilityIdentifier("displayedVacancyCount")
-                Text("Полевые учреждения: \(viewModel.displayedResults.filter(\.isFieldInstitution).count)")
-                    .accessibilityIdentifier("fieldInstitutionCount")
-                if let updatedAt = viewModel.updatedAtMessage {
-                    Text(updatedAt)
-                        .accessibilityIdentifier("vacancyUpdateStatus")
-                }
-                VacancyStatusMessage(message: viewModel.isLoading ? viewModel.currentEmployerName : viewModel.finalExtractionStatus)
+                VacancyStatusSummary(
+                    vacancyCountMessage: viewModel.displayedVacancyCountMessage,
+                    fieldInstitutionCount: viewModel.displayedResults.filter(\.isFieldInstitution).count,
+                    updatedAtMessage: viewModel.updatedAtMessage,
+                    loadingEmployerName: viewModel.isLoading ? viewModel.currentEmployerName : nil)
                 Spacer()
                 Group {
                     PDFExportCommand(title: bulkExportTitle) {
@@ -169,34 +171,12 @@ enum VacancySearchViews {
                 .font(.caption).foregroundColor(.secondary).padding(.horizontal, 28).padding(.vertical, 10)
         }
 
-        private func empty(title: String, message: String, action: String?) -> some View {
+        private func empty(title: String, message: String) -> some View {
             VStack(spacing: 12) {
                 Text(title).font(.headline)
                 Text(message).foregroundColor(.secondary).multilineTextAlignment(.center).frame(maxWidth: 520)
-                if let action {
-                    VacancyRefreshButton(title: action, action: refresh)
-                    .accessibilityIdentifier("emptyRefreshVacanciesButton")
-                }
             }.padding(32).frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-    }
-}
-
-@MainActor
-struct PDFExportCommand: View {
-    let title: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.body)
-                .frame(height: 32)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.borderless)
-        .controlSize(.regular)
-        .foregroundColor(.primary)
     }
 }
 
@@ -230,10 +210,7 @@ private struct VacancyCard: View {
                     if let department = result.departmentName { Text(department).font(.caption).foregroundColor(.secondary) }
                 }
                 Spacer()
-                VStack(alignment: .trailing, spacing: 5) {
-                    Text(result.salaryText ?? "Зарплата не указана").font(.system(size: 13))
-                    Text(result.areaName).font(.caption).foregroundColor(.secondary)
-                }
+                VacancyCompensationSummary(salary: result.salaryText, area: result.areaName)
             }
             HStack(spacing: 10) {
                 Button("Открыть на hh.ru ↗", action: openURL).disabled(result.alternateURL == nil)
@@ -242,7 +219,13 @@ private struct VacancyCard: View {
                     .accessibilityIdentifier("expandVacancy.\(result.id)")
                 Spacer()
                 PDFExportCommand(title: exported ? "✓ Сохранено" : "Экспорт в PDF", action: {
-                    Task { if await exportPDF() { exported = true } }
+                    Task {
+                        if await exportPDF() {
+                            exported = true
+                            try? await Task.sleep(nanoseconds: 2_000_000_000)
+                            exported = false
+                        }
+                    }
                 }).disabled(exported)
                     .accessibilityIdentifier("exportVacancyPDF.\(result.id)")
             }.buttonStyle(.borderless)
@@ -305,49 +288,22 @@ struct VacancyHTMLDescriptionView: NSViewRepresentable {
         var loaded: String?
         #if compiler(>=6.0)
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {
-            action.request.url?.scheme == "about" ? .allow : .cancel
+            if action.request.url?.scheme == "about" { return .allow }
+            if action.navigationType == .linkActivated, let url = action.request.url,
+               ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
+                NSWorkspace.shared.open(url)
+            }
+            return .cancel
         }
         #else
         nonisolated func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {
-            action.request.url?.scheme == "about" ? .allow : .cancel
+            if action.request.url?.scheme == "about" { return .allow }
+            if action.navigationType == .linkActivated, let url = action.request.url,
+               ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
+                _ = await MainActor.run { NSWorkspace.shared.open(url) }
+            }
+            return .cancel
         }
         #endif
-    }
-}
-
-enum DeskPalette {
-    static let content = Color(nsColor: .textBackgroundColor)
-    static let toolbar = Color(nsColor: .windowBackgroundColor)
-}
-
-/// Displays only the dedicated extraction status supplied by the view model.
-struct VacancyStatusMessage: View {
-    let message: String?
-
-    var body: some View {
-        if let message {
-            Text(message)
-                .truncationMode(.tail)
-                .help(message)
-                .fixedSize(horizontal: true, vertical: false)
-                .layoutPriority(1)
-                .accessibilityLabel(message)
-                .accessibilityIdentifier("vacancyExtractionStatus")
-        }
-    }
-}
-
-/// Shared geometry for every refresh/cancel control, regardless of its title.
-struct VacancyRefreshButton: View {
-    let title: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(title).frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
-        .frame(width: 120, height: 32)
     }
 }

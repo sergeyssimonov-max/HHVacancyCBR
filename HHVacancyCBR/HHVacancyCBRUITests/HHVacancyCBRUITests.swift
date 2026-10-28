@@ -23,10 +23,11 @@ final class HHVacancyCBRUITests: XCTestCase {
         XCTAssertFalse(app.buttons["searchVacanciesButton"].exists)
         app.buttons["refreshTrudvsemButton"].click()
         XCTAssertTrue(app.staticTexts["Администратор баз данных"].waitForExistence(timeout: 8))
-        let finalStatus = app.staticTexts["vacancyExtractionStatus"]
-        XCTAssertTrue(finalStatus.waitForExistence(timeout: 8))
-        let statusText = finalStatus.value as? String ?? finalStatus.label
-        XCTAssertNotNil(statusText.range(of: "^.*: [0-9]+ из [0-9]+, страниц: [0-9]+$", options: .regularExpression), statusText)
+        let refreshFinished = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "Обновить"),
+            object: app.buttons["refreshTrudvsemButton"])
+        XCTAssertEqual(XCTWaiter.wait(for: [refreshFinished], timeout: 8), .completed)
+        XCTAssertFalse(app.staticTexts["vacancyExtractionStatus"].exists)
         XCTAssertFalse(app.staticTexts["PDF сохранён."].exists)
         choose("НСИС", from: "employerFilterPicker", in: app)
         app.radioButtons["hh.ru"].click()
@@ -77,15 +78,18 @@ final class HHVacancyCBRUITests: XCTestCase {
         add(reopened)
     }
 
-    func testInitialRefreshButtonMatchesToolbarButton() {
+    func testInitialScreensUseToolbarRefreshOnly() {
         let app = launch()
         let toolbarButton = app.buttons["searchVacanciesButton"]
         let emptyButton = app.buttons["emptyRefreshVacanciesButton"]
         XCTAssertTrue(toolbarButton.waitForExistence(timeout: 5))
-        XCTAssertTrue(emptyButton.exists)
-        XCTAssertEqual(emptyButton.label, "Обновить")
-        XCTAssertEqual(emptyButton.frame.width, toolbarButton.frame.width, accuracy: 2)
-        XCTAssertEqual(emptyButton.frame.height, toolbarButton.frame.height, accuracy: 2)
+        XCTAssertFalse(emptyButton.exists)
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label == %@", "Обновить")).count, 1)
+        XCTAssertTrue(app.staticTexts["Загрузите вакансии hh.ru кнопкой «Обновить»."].exists)
+        app.radioButtons["trudvsem.ru"].click()
+        XCTAssertTrue(app.buttons["refreshTrudvsemButton"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label == %@", "Обновить")).count, 1)
+        XCTAssertTrue(app.staticTexts["Загрузите вакансии trudvsem.ru кнопкой «Обновить»."].exists)
     }
 
     func testToolbarUsesOneAlignedRowWithoutExternalFilterLabels() {
@@ -131,18 +135,18 @@ final class HHVacancyCBRUITests: XCTestCase {
         let app = launch()
         app.buttons["searchVacanciesButton"].click()
         XCTAssertTrue(app.staticTexts["vacancyTitle.ui-1"].waitForExistence(timeout: 8))
-        XCTAssertEqual(app.staticTexts["displayedVacancyCount"].value as? String, "Показано вакансий: 3")
+        XCTAssertEqual(app.staticTexts["displayedVacancyCount"].value as? String, "Вакансий: 3")
 
         choose("НСПК", from: "employerFilterPicker", in: app)
 
         XCTAssertTrue(app.staticTexts["vacancyTitle.ui-3"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.staticTexts["displayedVacancyCount"].value as? String, "Показано вакансий: 1")
+        XCTAssertEqual(app.staticTexts["displayedVacancyCount"].value as? String, "Вакансий: 1")
         XCTAssertFalse(app.staticTexts["vacancyTitle.ui-1"].exists)
         XCTAssertFalse(app.staticTexts["vacancyTitle.ui-2"].exists)
 
         choose("Все работодатели", from: "employerFilterPicker", in: app)
         XCTAssertTrue(app.staticTexts["vacancyTitle.ui-1"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.staticTexts["displayedVacancyCount"].value as? String, "Показано вакансий: 3")
+        XCTAssertEqual(app.staticTexts["displayedVacancyCount"].value as? String, "Вакансий: 3")
     }
 
     func testRegionDropdownCombinesWithEmployerAndCanShowNoMatches() {
@@ -153,7 +157,7 @@ final class HHVacancyCBRUITests: XCTestCase {
         choose("Банк России", from: "employerFilterPicker", in: app)
         choose("Москва", from: "regionFilterPicker", in: app)
         XCTAssertTrue(app.staticTexts["vacancyTitle.ui-1"].exists)
-        XCTAssertEqual(app.staticTexts["displayedVacancyCount"].value as? String, "Показано вакансий: 1")
+        XCTAssertEqual(app.staticTexts["displayedVacancyCount"].value as? String, "Вакансий: 1")
         XCTAssertFalse(app.staticTexts["vacancyTitle.ui-2"].exists)
         XCTAssertFalse(app.staticTexts["vacancyTitle.ui-3"].exists)
 
@@ -196,7 +200,7 @@ final class HHVacancyCBRUITests: XCTestCase {
         XCTAssertEqual(report.frame.height, app.buttons["Экспорт в PDF"].firstMatch.frame.height, accuracy: 1)
         choose("Банк России", from: "employerFilterPicker", in: app)
         choose("Москва", from: "regionFilterPicker", in: app)
-        XCTAssertEqual(app.staticTexts["displayedVacancyCount"].value as? String, "Показано вакансий: 1")
+        XCTAssertEqual(app.staticTexts["displayedVacancyCount"].value as? String, "Вакансий: 1")
         XCTAssertTrue(report.isEnabled)
         XCTAssertEqual(report.frame.maxX, app.windows.firstMatch.frame.maxX - 28, accuracy: 2)
         let attachment = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
@@ -217,7 +221,7 @@ final class HHVacancyCBRUITests: XCTestCase {
         XCTAssertFalse(report.isEnabled)
         XCTAssertEqual(report.label, "Статистика в PDF")
         XCTAssertEqual(report.frame.height, 32, accuracy: 2)
-        XCTAssertEqual(app.staticTexts["displayedVacancyCount"].value as? String, "Показано вакансий: 0")
+        XCTAssertEqual(app.staticTexts["displayedVacancyCount"].value as? String, "Вакансий: 0")
     }
 
     func testCancellingRefreshKeepsPreviousResults() {
@@ -252,8 +256,8 @@ final class HHVacancyCBRUITests: XCTestCase {
         button.click()
         XCTAssertTrue(waitForLabel("Обновить", of: button, timeout: 10))
         let emptyButton = app.buttons["emptyRefreshVacanciesButton"]
-        XCTAssertTrue(emptyButton.waitForExistence(timeout: 5))
-        XCTAssertEqual(emptyButton.label, "Обновить")
+        XCTAssertTrue(app.staticTexts["Загрузите вакансии hh.ru кнопкой «Обновить»."].waitForExistence(timeout: 5))
+        XCTAssertFalse(emptyButton.exists)
         XCTAssertFalse(app.staticTexts["Вакансий не найдено"].exists)
     }
 

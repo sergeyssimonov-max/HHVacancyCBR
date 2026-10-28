@@ -5,6 +5,7 @@
 ```sh
 benchmark_dir=$(mktemp -d /private/tmp/HHVacancyCBR-benchmark.XXXXXX)
 bash scripts/benchmarks/build.sh "$benchmark_dir/benchmark"
+"$benchmark_dir/benchmark" reliability
 "$benchmark_dir/benchmark" gate 100
 "$benchmark_dir/benchmark" enrichment-cancel 100
 "$benchmark_dir/benchmark" enrichment-limit 100
@@ -27,3 +28,5 @@ bash scripts/benchmarks/build.sh "$benchmark_dir/benchmark"
 Каждый запуск создаёт собственный UUID-каталог и удаляет его после штатного завершения, включая transaction recovery directories, созданные только этим synthetic workload. Сам бинарник и module-cache остаются в выбранном `benchmark_dir`: после работы удалите именно этот проверенный каталог. После аварийного завершения проверьте собственный `HHRuntimeBench-*` каталог перед удалением. Не удаляйте пользовательские PDF recovery directories.
 
 Для визуальной проверки задайте `HH_BENCH_PREVIEW=/absolute/scratch/preview.pdf` режиму `statistics`: указанный scratch-файл будет заменён копией отчёта. Затем используйте `pdftoppm`. Не указывайте существующий пользовательский документ.
+
+Режим `reliability` запускает автономные проверки production-кода без службы XCTest: общий Retry-After между клиентами, отмена URL-запроса и очереди обновления, остановка при 401/403/429, ограничения страниц и времени, сохранение текста при пагинации, PDF-ссылки, три режима PDF trudvsem.ru и отказ при повреждении исходного ответа. Использует только синтетические ответы и виртуальное время; к живым API не обращается.

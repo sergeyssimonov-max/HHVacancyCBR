@@ -81,6 +81,7 @@ fi
 stage="$work/dmg"
 mkdir "$stage"
 ditto "$app" "$stage/ЦБВакансии.app"
+cp HHVacancyCBR/HHVacancyCBR/Vendor/Streebog/LICENSE "$stage/Streebog-LICENSE.txt"
 ln -s /Applications "$stage/Applications"
 cat > "$stage/README.txt" <<EOF
 ЦБВакансии $version ($build)
@@ -90,7 +91,7 @@ cat > "$stage/README.txt" <<EOF
 
 Установка: перетащите «ЦБВакансии» на значок «Программы» и запустите из «Программ».
 Требования: macOS 13 или новее, Mac с Apple silicon, подключение к интернету.
-Избранное и настройки хранятся только на этом Mac.
+Настройки и последние полные выборки сохраняются только на этом Mac.
 
 $signing
 
@@ -105,6 +106,7 @@ if [[ -n "${NOTARY_PROFILE:-}" ]]; then
   xcrun notarytool submit "$work/$name" --keychain-profile "$NOTARY_PROFILE" --wait
   xcrun stapler staple "$work/$name"
 fi
+codesign --verify --deep --strict "$app"
 hdiutil verify -quiet "$work/$name"
 
 python3 scripts/publish_release.py "$work/$name" "$output_dir"

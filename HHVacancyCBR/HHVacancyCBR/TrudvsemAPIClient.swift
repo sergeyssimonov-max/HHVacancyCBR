@@ -4,13 +4,44 @@ protocol TrudvsemAPI: Sendable {
     func vacancies(inn: String, page: Int, limit: Int) async throws -> TrudvsemPage
 }
 
+/// Shared pacing uses elapsed time, so a clock adjustment cannot create a burst.
 actor TrudvsemRequestGate {
-    private var next = Date.distantPast
+    static let shared = TrudvsemRequestGate()
+    private let minimumInterval: TimeInterval
+    private let now: @Sendable () -> TimeInterval
+    private let sleep: @Sendable (UInt64) async throws -> Void
+    private var nextRequest: TimeInterval = 0
+    private var cooldownUntil: TimeInterval = 0
+    private var cooldownStatus = 429
+
+    init(minimumInterval: TimeInterval = 1.5,
+         now: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+         sleep: @escaping @Sendable (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds: $0) }) {
+        self.minimumInterval = max(0, minimumInterval)
+        self.now = now
+        self.sleep = sleep
+    }
+
+    func imposeCooldown(seconds: TimeInterval, status: Int) {
+        let until = now() + max(0, seconds)
+        if until > cooldownUntil { cooldownUntil = until; cooldownStatus = status }
+    }
+
     func wait() async throws {
-        let now = Date(), slot = max(Date(), next)
-        next = slot.addingTimeInterval(1.5)
-        if slot > now { try await Task.sleep(nanoseconds: UInt64(slot.timeIntervalSince(now) * 1_000_000_000)) }
-        try Task.checkCancellation()
+        while true {
+            try Task.checkCancellation()
+            let instant = now()
+            let cooldown = cooldownUntil - instant
+            // Retain long server embargoes across refreshes without holding the UI for minutes.
+            guard cooldown.isFinite, cooldown <= 90 else { throw TrudvsemError.http(cooldownStatus) }
+            let remaining = max(nextRequest, cooldownUntil) - instant
+            if remaining <= 0 {
+                nextRequest = instant + minimumInterval
+                return
+            }
+            try await sleep(UInt64(ceil(remaining * 1_000_000_000)))
+            // Recheck after suspension: other requests or server cooldowns may have moved the slot.
+        }
     }
 }
 
@@ -26,7 +57,7 @@ struct TrudvsemAPIClient: TrudvsemAPI, Sendable {
         c.waitsForConnectivity = false
         return URLSession(configuration: c)
     }()
-    init(evidence: PDFSourceEvidence = .shared, gate: TrudvsemRequestGate = TrudvsemRequestGate(),
+    init(evidence: PDFSourceEvidence = .shared, gate: TrudvsemRequestGate = .shared,
          sleep: @escaping @Sendable (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds: $0) },
          transport: @escaping Transport = { request in
              let (data, response) = try await Self.session.data(for: request)
@@ -50,18 +81,21 @@ struct TrudvsemAPIClient: TrudvsemAPI, Sendable {
             let sent = Date()
             do {
                 let (data, response) = try await transport(request)
-                try Task.checkCancellation()
-                if response.statusCode == 429 || (500...599).contains(response.statusCode) {
-                    guard attempt < 2 else { throw TrudvsemError.http(response.statusCode) }
-                    let retry = Self.retryAfter(response.value(forHTTPHeaderField: "Retry-After"), now: Date()) ?? pow(2, Double(attempt))
-                    // Long Retry-After is reported rather than retried earlier than the server allows.
-                    guard retry <= 90 else { throw TrudvsemError.http(response.statusCode) }
-                    try await sleep(UInt64(max(0, retry) * 1_000_000_000)); continue
+                if response.statusCode == 429 || [500, 502, 503, 504].contains(response.statusCode) {
+                    let retry = max(pow(2, Double(attempt)), Self.retryAfter(response.value(forHTTPHeaderField: "Retry-After"), now: Date()) ?? 0)
+                    await gate.imposeCooldown(seconds: retry, status: response.statusCode)
+                    try Task.checkCancellation()
+                    guard attempt < 2, retry <= 90 else { throw TrudvsemError.http(response.statusCode) }
+                    try await sleep(UInt64(ceil(retry * 1_000_000_000)))
+                    continue
                 }
+                try Task.checkCancellation()
                 guard (200...299).contains(response.statusCode) else { throw TrudvsemError.http(response.statusCode) }
                 var page = try TrudvsemPage(data: data)
                 page.observationID = try evidence.capture(data: data, url: url, status: response.statusCode, sent: sent, received: Date())?.id
                 return page
+            } catch let error as URLError where error.code == .cancelled {
+                throw CancellationError()
             } catch let error as URLError where [.timedOut, .networkConnectionLost, .cannotConnectToHost].contains(error.code) && attempt < 2 {
                 try await sleep(UInt64(pow(2, Double(attempt)) * 1_000_000_000))
             }
@@ -69,9 +103,10 @@ struct TrudvsemAPIClient: TrudvsemAPI, Sendable {
         throw TrudvsemError.invalid("Повторы исчерпаны")
     }
     static func retryAfter(_ value: String?, now: Date) -> TimeInterval? {
-        guard let value else { return nil }
-        if let seconds = Double(value), seconds.isFinite { return max(0, seconds) }
-        let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.timeZone = TimeZone(secondsFromGMT: 0); f.dateFormat = "EEE, dd MMM yyyy HH:mm:ss z"
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
+        // An overflowing positive delay must stop requests, not fall back to a short retry.
+        if let seconds = Double(value), !seconds.isNaN { return max(0, seconds) }
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.timeZone = TimeZone(secondsFromGMT: 0); f.dateFormat = "EEE, dd MMM yyyy HH:mm:ss z"; f.isLenient = false
         return f.date(from: value).map { max(0, $0.timeIntervalSince(now)) }
     }
 }
@@ -94,21 +129,26 @@ struct TrudvsemCollectionService: Sendable {
     let client: any TrudvsemAPI
     var pageSize = 100
     var maximumDuration: TimeInterval = 15 * 60
+    var maximumPagesPerEmployer = 500
+    var now: @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     func collect(organizations: [Organization] = OrganizationRegistry.available(on: .trudvsem),
                  progress: @escaping @MainActor @Sendable (String) -> Void) async throws -> TrudvsemCollection {
-        let started = Date()
+        let started = now()
         var all: [TrudvsemVacancy] = [], metrics: [TrudvsemCollection.Metrics] = [], issues: [String] = []
         for organization in organizations {
             try Task.checkCancellation()
+            guard now() - started < maximumDuration else { throw TrudvsemError.incomplete("Истекло время сбора") }
             await progress(organization.name)
             var pageIndex = 0, received = 0, expected: Int?, values: [String: TrudvsemVacancy] = [:]
             var fingerprints = Set<String>()
             do {
                 while true {
                     try Task.checkCancellation()
-                    guard Date().timeIntervalSince(started) < maximumDuration else { throw TrudvsemError.incomplete("Истекло время сбора") }
+                    guard now() - started < maximumDuration else { throw TrudvsemError.incomplete("Истекло время сбора") }
+                    guard pageIndex < maximumPagesPerEmployer else { throw TrudvsemError.incomplete("Превышен лимит страниц работодателя") }
                     let page = try await client.vacancies(inn: organization.inn, page: pageIndex, limit: pageSize)
                     try Task.checkCancellation()
+                    guard now() - started < maximumDuration else { throw TrudvsemError.incomplete("Истекло время сбора") }
                     if let expected, expected != page.total { throw TrudvsemError.incomplete("meta.total изменился для \(organization.name)") }
                     expected = page.total; received += page.receivedCount; pageIndex += 1
                     guard page.malformedCount == 0 else { throw TrudvsemError.incomplete("Повреждённых записей: \(page.malformedCount)") }
@@ -128,6 +168,11 @@ struct TrudvsemCollectionService: Sendable {
                     guard values.count < page.total, !page.vacancies.isEmpty, values.count > priorCount else { throw TrudvsemError.incomplete("Число уникальных вакансий не совпадает с meta.total") }
                 }
             } catch is CancellationError { throw CancellationError() }
+            catch let error as URLError where error.code == .cancelled { throw CancellationError() }
+            catch let error as TrudvsemError {
+                if case .http(let status) = error, [401, 403, 429].contains(status) { throw error }
+                issues.append("\(organization.name): \(error.localizedDescription)")
+            }
             catch { issues.append("\(organization.name): \(error.localizedDescription)") }
             metrics.append(.init(organizationKey: organization.id, declared: expected ?? 0, received: received, unique: values.count, pages: pageIndex))
             all += values.values.sorted { $0.id < $1.id }

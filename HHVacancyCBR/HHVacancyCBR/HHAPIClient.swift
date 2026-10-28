@@ -94,6 +94,7 @@ struct HHAPIClient: HHVacancyAPIClient, Sendable {
     private let session: URLSession
     private let accessTokenProvider: HHAccessTokenProviding
     private let requestGate: HHRequestGate
+    private let evidence: PDFSourceEvidence
     private let maximumRateLimitRetries: Int
     private let maximumTransientRetries: Int
     private let retrySleep: @Sendable (UInt64) async throws -> Void
@@ -103,6 +104,7 @@ struct HHAPIClient: HHVacancyAPIClient, Sendable {
         session: URLSession = HHAPIClient.defaultSession,
         accessTokenProvider: HHAccessTokenProviding = HHDefaultAccessTokenProvider(),
         requestGate: HHRequestGate = .shared,
+        evidence: PDFSourceEvidence = .shared,
         maximumRateLimitRetries: Int = 2,
         maximumTransientRetries: Int = 2,
         retrySleep: @escaping @Sendable (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds: $0) },
@@ -111,6 +113,7 @@ struct HHAPIClient: HHVacancyAPIClient, Sendable {
         self.session = session
         self.accessTokenProvider = accessTokenProvider
         self.requestGate = requestGate
+        self.evidence = evidence
         self.maximumRateLimitRetries = min(2, max(0, maximumRateLimitRetries))
         self.maximumTransientRetries = min(2, max(0, maximumTransientRetries))
         self.retrySleep = retrySleep
@@ -183,7 +186,8 @@ struct HHAPIClient: HHVacancyAPIClient, Sendable {
         var request = URLRequest(url: url, timeoutInterval: 30)
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        let agent = "HHVacancyCBR/1.0 (\(Self.contact))"
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.2.1"
+        let agent = "HHVacancyCBR/\(version) (\(Self.contact))"
         request.setValue(agent, forHTTPHeaderField: "User-Agent")
         request.setValue(agent, forHTTPHeaderField: "HH-User-Agent")
         if let token = HHAuthConfig.normalizedAccessToken(accessTokenProvider.accessToken) {
@@ -227,7 +231,7 @@ struct HHAPIClient: HHVacancyAPIClient, Sendable {
     static let transientStatusCodes: Set<Int> = [500, 502, 503, 504]
 
     private func data(for request: URLRequest) async throws -> (Data, String?) {
-        try await requestGate.perform {
+        let response: (Data, URL, Int, Date, Date) = try await requestGate.perform {
             var retryCount = 0
             var transientRetryCount = 0
             var attempts = 0
@@ -259,8 +263,8 @@ struct HHAPIClient: HHVacancyAPIClient, Sendable {
                     if let token = accessTokenProvider.accessToken, !token.isEmpty, data.range(of: Data(token.utf8)) != nil {
                         throw PDFSourceError.invalid("Секрет в ответе API")
                     }
-                    let observation = try PDFSourceEvidence.shared.capture(data: data, url: request.url!, status: http.statusCode, sent: sentAt, received: Date())
-                    return (data, observation?.id)
+                    guard let url = request.url else { throw HHAPIError.invalidURL }
+                    return (data, url, http.statusCode, sentAt, Date())
                 }
                 let body = try? JSONDecoder().decode(HHErrorResponse.self, from: data)
                 if body?.isCaptchaRequired == true { throw HHAPIError.captchaRequired(requestID: body?.requestID) }
@@ -291,6 +295,15 @@ struct HHAPIClient: HHVacancyAPIClient, Sendable {
                 }
             }
         }
+        try Task.checkCancellation()
+        let observation: APIObservation?
+        do {
+            observation = try evidence.capture(data: response.0, url: response.1, status: response.2, sent: response.3, received: response.4)
+        } catch {
+            NSLog("Не удалось сохранить исходный ответ hh.ru для PDF: %@", error.localizedDescription)
+            observation = nil
+        }
+        return (response.0, observation?.id)
     }
 
 }

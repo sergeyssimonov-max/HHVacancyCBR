@@ -11,10 +11,9 @@ struct TrudvsemViews: View {
             Divider()
             if let error = viewModel.errorMessage { Text(error).font(.caption).foregroundColor(.red).padding(8).textSelection(.enabled) }
             if viewModel.results.isEmpty {
-                VStack(spacing: 12) {
-                    if viewModel.isLoading { ProgressView() }
-                    Text(viewModel.updatedAt == nil ? "Загрузите вакансии trudvsem.ru кнопкой «Обновить»." : "Вакансий не найдено.")
-                }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                VacancyEmptyState(
+                    message: viewModel.updatedAt == nil ? "Загрузите вакансии trudvsem.ru кнопкой «Обновить»." : "Вакансий не найдено.",
+                    isLoading: viewModel.isLoading)
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
@@ -53,13 +52,11 @@ struct TrudvsemViews: View {
 
     private var statusBar: some View {
         HStack(spacing: 12) {
-            Text("Показано вакансий: \(viewModel.displayedResults.count)").accessibilityIdentifier("displayedVacancyCount")
-            Text("Полевые учреждения: \(viewModel.displayedResults.filter { $0.fieldInstitution.isMember }.count)")
-                .accessibilityIdentifier("fieldInstitutionCount")
-            if let date = viewModel.updatedAt {
-                Text(VacancyDisplayFormat.updatedAt(date)).accessibilityIdentifier("vacancyUpdateStatus")
-            }
-            VacancyStatusMessage(message: viewModel.isLoading ? viewModel.currentEmployerName : viewModel.finalExtractionStatus)
+            VacancyStatusSummary(
+                vacancyCountMessage: VacancyDisplayFormat.vacancyCount(viewModel.displayedResults.count),
+                fieldInstitutionCount: viewModel.displayedResults.filter { $0.fieldInstitution.isMember }.count,
+                updatedAtMessage: viewModel.updatedAt.map { VacancyDisplayFormat.updatedAt($0) },
+                loadingEmployerName: viewModel.isLoading ? viewModel.currentEmployerName : nil)
             Spacer()
             PDFExportCommand(title: viewModel.isExporting ? "Отменить экспорт" : "Все вакансии в PDF") {
                 if viewModel.isExporting { viewModel.cancelExport() } else { viewModel.export(.all) }
@@ -78,11 +75,7 @@ struct TrudvsemViews: View {
                     if value.fieldInstitution.isMember { Text("Полевое учреждение").font(.caption).foregroundColor(.secondary).help(value.fieldInstitution.reason ?? "") }
                 }
                 Spacer()
-                VStack(alignment: .trailing, spacing: 5) {
-                    Text(value.salary ?? "Зарплата не указана").font(.system(size: 13))
-                    Text(value.region).font(.caption).foregroundColor(.secondary)
-                    if let date = value.created { Text("Создана: \(date)").font(.caption) }
-                }
+                VacancyCompensationSummary(salary: value.salary, area: value.region)
             }
             HStack(spacing: 10) {
                 if let url = value.url { Button("Открыть на trudvsem.ru ↗") { NSWorkspace.shared.open(url) } }

@@ -25,6 +25,7 @@
 		CA0000000000000000000002 /* VacancySnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA0000000000000000000001 /* VacancySnapshotStore.swift */; };
 		A10000022FF9BA0000CF4705 /* VacancySearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012FF9BA0000CF4705 /* VacancySearchViewModel.swift */; };
 		A10000022FF9BA0000CF4707 /* VacancySearchViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012FF9BA0000CF4707 /* VacancySearchViews.swift */; };
+		F21000000000000000000001 /* VacancySharedViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F21000000000000000000002 /* VacancySharedViews.swift */; };
 		A10000022FF9BA0000CF4710 /* VacanciesPDFExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012FF9BA0000CF4710 /* VacanciesPDFExporter.swift */; };
 DE1000000000000000000000 = {isa = PBXBuildFile; fileRef = DE0000000000000000000000; };
 DE1000000000000000000001 = {isa = PBXBuildFile; fileRef = DE0000000000000000000001; };
@@ -77,6 +78,7 @@ EF1000000000000000000005 = {isa = PBXBuildFile; fileRef = EF00000000000000000000
 		CA0000000000000000000001 /* VacancySnapshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VacancySnapshotStore.swift; sourceTree = "<group>"; };
 		A10000012FF9BA0000CF4705 /* VacancySearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VacancySearchViewModel.swift; sourceTree = "<group>"; };
 		A10000012FF9BA0000CF4707 /* VacancySearchViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VacancySearchViews.swift; sourceTree = "<group>"; };
+		F21000000000000000000002 /* VacancySharedViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VacancySharedViews.swift; sourceTree = "<group>"; };
 		A10000012FF9BA0000CF4710 /* VacanciesPDFExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VacanciesPDFExporter.swift; sourceTree = "<group>"; };
 DE0000000000000000000000 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PDFSourceEvidence.swift"; sourceTree = "<group>"; };
 DE0000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = "Vendor/Streebog/gost3411-2012-core.c"; sourceTree = "<group>"; };
@@ -159,6 +161,7 @@ EF0000000000000000000000,
 				CA0000000000000000000001 /* VacancySnapshotStore.swift */,
 				A10000012FF9BA0000CF4705 /* VacancySearchViewModel.swift */,
 				A10000012FF9BA0000CF4707 /* VacancySearchViews.swift */,
+				F21000000000000000000002 /* VacancySharedViews.swift */,
 				A10000012FF9BA0000CF4710 /* VacanciesPDFExporter.swift */,
 				14C76CCA2FF9B91E00CF4748 /* Assets.xcassets */,
 				14C76CCF2FF9B91E00CF4748 /* HHVacancyCBR.entitlements */,
@@ -344,6 +347,7 @@ EF1000000000000000000000,
 				CA0000000000000000000002 /* VacancySnapshotStore.swift in Sources */,
 				A10000022FF9BA0000CF4705 /* VacancySearchViewModel.swift in Sources */,
 				A10000022FF9BA0000CF4707 /* VacancySearchViews.swift in Sources */,
+				F21000000000000000000001 /* VacancySharedViews.swift in Sources */,
 				A10000022FF9BA0000CF4710 /* VacanciesPDFExporter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -510,7 +514,7 @@ EF1000000000000000000000,
 				SWIFT_OBJC_BRIDGING_HEADER = "HHVacancyCBR/Vendor/Streebog/Bridge.h";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_ASSET_PATHS = "\"HHVacancyCBR/Preview Content\"";
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = NO;
@@ -521,12 +525,13 @@ EF1000000000000000000000,
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = local.sergey.HHVacancyCBR;
 				PRODUCT_MODULE_NAME = HHVacancyCBR;
 				PRODUCT_NAME = "ЦБВакансии";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
+				SWIFT_STRICT_CONCURRENCY = complete;
 			};
 			name = Debug;
 		};
@@ -540,7 +545,7 @@ EF1000000000000000000000,
 				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_ASSET_PATHS = "\"HHVacancyCBR/Preview Content\"";
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -551,12 +556,13 @@ EF1000000000000000000000,
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = local.sergey.HHVacancyCBR;
 				PRODUCT_MODULE_NAME = HHVacancyCBR;
 				PRODUCT_NAME = "ЦБВакансии";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
+				SWIFT_STRICT_CONCURRENCY = complete;
 			};
 			name = Release;
 		};
@@ -574,6 +580,7 @@ EF1000000000000000000000,
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
+				SWIFT_STRICT_CONCURRENCY = complete;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ЦБВакансии.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ЦБВакансии";
 			};
 			name = Debug;
@@ -592,6 +599,7 @@ EF1000000000000000000000,
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
+				SWIFT_STRICT_CONCURRENCY = complete;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ЦБВакансии.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ЦБВакансии";
 			};
 			name = Release;
@@ -608,6 +616,7 @@ EF1000000000000000000000,
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
+				SWIFT_STRICT_CONCURRENCY = complete;
 				TEST_TARGET_NAME = HHVacancyCBR;
 			};
 			name = Debug;
@@ -624,6 +633,7 @@ EF1000000000000000000000,
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
+				SWIFT_STRICT_CONCURRENCY = complete;
 				TEST_TARGET_NAME = HHVacancyCBR;
 			};
 			name = Release;

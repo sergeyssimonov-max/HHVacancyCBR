@@ -85,6 +85,9 @@ class ReleaseScriptTests(unittest.TestCase):
             shutil.copy(RELEASE_SCRIPT, scripts / "release.sh")
             shutil.copy(REPOSITORY_ROOT / "scripts/publish_release.py", scripts / "publish_release.py")
             (scripts / "verify_release_entitlements.py").write_text("print('{}')\n")
+            license_path = repository / "HHVacancyCBR/HHVacancyCBR/Vendor/Streebog/LICENSE"
+            license_path.parent.mkdir(parents=True)
+            license_path.write_text("BSD-2-Clause")
             (repository / "source.txt").write_text("committed")
             git = ["git", "-C", str(repository), "-c", "user.name=Test", "-c", "user.email=test@example.invalid"]
             subprocess.run(git[:3] + ["init", "-q"], check=True)

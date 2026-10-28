@@ -119,8 +119,12 @@ struct TrudvsemEmployerConfigurationStore: Sendable {
         if !busy { busy = true; return }
         let id = UUID()
         try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { continuation in
-                waiters.append(Waiter(id: id, continuation: continuation))
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                if Task.isCancelled {
+                    continuation.resume(throwing: CancellationError())
+                } else {
+                    waiters.append(Waiter(id: id, continuation: continuation))
+                }
             }
         } onCancel: {
             Task { @MainActor in cancel(id) }
@@ -137,11 +141,5 @@ struct TrudvsemEmployerConfigurationStore: Sendable {
     static func release() {
         if waiters.isEmpty { busy = false }
         else { waiters.removeFirst().continuation.resume() }
-    }
-}
-
-enum VacancyExtractionStatus {
-    static func summary(employer: String, extracted: Int, expected: Int, pages: Int) -> String {
-        "\(employer): \(extracted) из \(expected), страниц: \(pages)"
     }
 }

@@ -34,17 +34,8 @@ struct AreaDirectoryIndex: Sendable {
     func children(of id: String) -> [HHAreaNode] { nodes[id]?.areas ?? [] }
 
     func location(for summary: HHVacancySummary) -> VacancyLocation {
-        let remoteIDs = Set(["REMOTE", "remote"])
-        if summary.workFormat?.contains(where: { remoteIDs.contains($0.id ?? "") }) == true
-            || summary.schedule?.id == "remote" {
-            return .remote
-        }
-        let locations: [HHArea]
-        if let areas = summary.areas, !areas.isEmpty {
-            locations = areas
-        } else {
-            locations = summary.area.map { [$0] } ?? []
-        }
+        if summary.area == nil, summary.workFormat?.contains(where: { $0.id == "REMOTE" }) == true { return .remote }
+        let locations = summary.area.map { [$0] } ?? summary.areas ?? []
         guard locations.count == 1, let areaID = locations[0].id, areaID != root.id else { return .unknown }
         guard let subject = subjectAncestor(for: areaID) else {
             // Preserve HH geography outside the cached Russian tree; do not invent a Russian region.
@@ -110,6 +101,9 @@ struct AreaDirectoryStore: @unchecked Sendable {
     var fileURL: URL {
         get throws {
             if let configuredFileURL { return configuredFileURL }
+            if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+                return fileManager.temporaryDirectory.appendingPathComponent("HHVacancyCBR-areas-tests-\(ProcessInfo.processInfo.processIdentifier).json")
+            }
             return try ApplicationSupportLocation.fileURL(named: "areas.json", fileManager: fileManager)
         }
     }

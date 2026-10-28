@@ -17,6 +17,10 @@ enum VacancyDisplayFormat {
         return formatter
     }()
 
+    static func vacancyCount(_ count: Int) -> String {
+        "Вакансий: \(count)"
+    }
+
     static func updatedAt(_ date: Date) -> String {
         // Refresh the zone if the user changes it while the app is running.
         timestampFormatter.timeZone = .current
@@ -741,10 +745,11 @@ struct VacancySearchResult: Identifiable {
         persistedSalaryText: String? = nil,
         isArchived: Bool? = nil,
         archiveCheckedAt: Date? = nil,
-        exportDataNotice: String? = nil
+        exportDataNotice: String? = nil,
+        classification: FieldInstitutionClassification? = nil
     ) {
-        let classification = FieldInstitutionClassifier.classify(summary: summary, details: details)
-        self.fieldInstitution = classification.isMember ? classification : (summary.fieldInstitutionEvidence ?? classification)
+        let classification = classification ?? FieldInstitutionClassifier.classify(summary: summary, details: details)
+        self.fieldInstitution = classification
         self.id = id
         var classifiedSummary = summary
         classifiedSummary.fieldInstitutionEvidence = self.fieldInstitution
@@ -836,7 +841,8 @@ struct VacancySearchResult: Identifiable {
             id: id, summary: summary, details: details, location: location,
             isDetailLoaded: isDetailLoaded, isDetailLoading: isDetailLoading,
             detailErrorMessage: detailErrorMessage, persistedSalaryText: persistedSalaryText,
-            isArchived: archived, archiveCheckedAt: checkedAt, exportDataNotice: exportDataNotice
+            isArchived: archived, archiveCheckedAt: checkedAt, exportDataNotice: exportDataNotice,
+            classification: fieldInstitution
         )
     }
 
@@ -855,7 +861,8 @@ struct VacancySearchResult: Identifiable {
             persistedSalaryText: persistedSalaryText,
             isArchived: isArchived,
             archiveCheckedAt: archiveCheckedAt,
-            exportDataNotice: exportDataNotice
+            exportDataNotice: exportDataNotice,
+            classification: fieldInstitution
         )
     }
 }
@@ -881,11 +888,15 @@ extension String {
             value = value.replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
             value = value
                 .replacingOccurrences(of: "&nbsp;", with: " ")
-                .replacingOccurrences(of: "&amp;", with: "&")
-                .replacingOccurrences(of: "&lt;", with: "<")
+                                .replacingOccurrences(of: "&lt;", with: "<")
                 .replacingOccurrences(of: "&gt;", with: ">")
                 .replacingOccurrences(of: "&quot;", with: "\"")
                 .replacingOccurrences(of: "&#39;", with: "'")
+                .replacingOccurrences(of: "&laquo;", with: "«")
+                .replacingOccurrences(of: "&raquo;", with: "»")
+                .replacingOccurrences(of: "&mdash;", with: "—")
+                .replacingOccurrences(of: "&ndash;", with: "–")
+                .replacingOccurrences(of: "&amp;", with: "&")
             value = value.replacingOccurrences(of: "[ \\t]+", with: " ", options: .regularExpression)
             value = value.replacingOccurrences(of: " *\\n *", with: "\n", options: .regularExpression)
             value = value.replacingOccurrences(of: "\\n{3,}", with: "\n\n", options: .regularExpression)

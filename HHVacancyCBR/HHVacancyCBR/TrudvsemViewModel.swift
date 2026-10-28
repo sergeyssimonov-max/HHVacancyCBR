@@ -36,7 +36,6 @@ final class TrudvsemViewModel: ObservableObject {
     }
     @Published private(set) var isLoading = false
     @Published private(set) var isCancellingSearch = false
-    @Published private(set) var finalExtractionStatus: String?
     @Published private(set) var currentEmployerName: String?
     @Published private(set) var statusMessage: String?
     @Published private(set) var errorMessage: String?
@@ -115,10 +114,6 @@ final class TrudvsemViewModel: ObservableObject {
             let collection = try await TrudvsemCollectionService(client: client).collect { [weak self] in self?.currentEmployerName = $0 }
             try Task.checkCancellation()
             metrics = collection.metrics; collectionIssues = collection.issues
-            if let last = metrics.last, let employer = OrganizationRegistry.all.first(where: { $0.id == last.organizationKey }) {
-                finalExtractionStatus = VacancyExtractionStatus.summary(employer: employer.name, extracted: last.unique,
-                    expected: last.declared, pages: last.pages)
-            }
             guard collection.isComplete else { throw TrudvsemError.incomplete(collection.issues.joined(separator: "\n")) }
             let snapshot = TrudvsemSnapshot(version: 1, vacancies: collection.vacancies, metrics: collection.metrics, updatedAt: Date())
             try Task.checkCancellation()
@@ -142,29 +137,28 @@ final class TrudvsemViewModel: ObservableObject {
             defer { self.isExporting = false; self.exportTask = nil; self.exportProgress = nil }
             do {
                 let worker = PDFExportWorker()
+                let exportStartedAt = Date()
                 switch mode {
                 case .all:
-                    var snapshots: [PDFVacancySnapshot] = []
-                    for value in values {
-                        try Task.checkCancellation()
-                        snapshots.append(TrudvsemPDFFormatter.personal(value)); await Task.yield()
-                    }
-                    let prepared = try await worker.prepare(vacancies: PDFVacanciesSnapshot(snapshots: snapshots), filters: filters) { [weak self] in self?.exportProgress = $0 }
+                    let prepared = try await worker.prepareTrudvsem(vacancies: values, filters: filters) { [weak self] in self?.exportProgress = $0 }
                     try Task.checkCancellation()
                     guard let directory = VacanciesPDFExporter.chooseExportDirectory() else { return }
-                    let names = (1...prepared.partCount).map { PDFFileNameBuilder.bulk(part: $0, totalParts: prepared.partCount, exportStartedAt: Date(), source: .trudvsem) }
+                    let names = (1...prepared.partCount).map { PDFFileNameBuilder.bulk(part: $0, totalParts: prepared.partCount, exportStartedAt: exportStartedAt, source: .trudvsem) }
                     exportProgress = .init(completedVacancies: values.count, totalVacancies: values.count, stage: "Сохранение файлов")
                     let urls = try await worker.writePrepared(names: names, directory: directory)
                     statusMessage = "Экспортировано вакансий: \(values.count), PDF: \(urls.count), страниц: \(prepared.pageCount)."
                 case .statistics, .personal:
-                    let document: PDFVacancySnapshot
                     let title: String
-                    if case .personal(let vacancy) = mode { document = TrudvsemPDFFormatter.personal(vacancy); title = vacancy.title }
-                    else { document = TrudvsemPDFFormatter.statistics(values, filters: filters); title = "статистика" }
+                    if case .personal(let vacancy) = mode { title = vacancy.title }
+                    else { title = "статистика" }
                     let panel = NSSavePanel(); panel.allowedContentTypes = [.pdf]; panel.canCreateDirectories = true
-                    panel.nameFieldStringValue = PDFFileNameBuilder.personal(vacancyID: "", title: "trudvsem_ru_" + title, exportStartedAt: Date())
+                    panel.nameFieldStringValue = PDFFileNameBuilder.personal(vacancyID: "", title: "trudvsem_ru_" + title, exportStartedAt: exportStartedAt)
                     guard panel.runModal() == .OK, let url = panel.url else { return }
-                    try await worker.exportDocument(document: document, destination: url)
+                    if case .personal(let vacancy) = mode {
+                        try await worker.exportTrudvsemPersonal(vacancy: vacancy, destination: url)
+                    } else {
+                        try await worker.exportTrudvsemStatistics(vacancies: values, filters: filters, destination: url)
+                    }
                     statusMessage = "PDF сохранён."
                 }
             } catch is CancellationError { statusMessage = "Экспорт отменён." }

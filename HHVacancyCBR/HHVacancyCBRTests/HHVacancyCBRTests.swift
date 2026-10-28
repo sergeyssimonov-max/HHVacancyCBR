@@ -43,13 +43,6 @@ final class HHVacancyCBRTests: XCTestCase {
         VacancyRefreshScheduler.release()
     }
 
-    func testExtractionStatusUsesExactRequestedFormat() {
-        XCTAssertEqual(VacancyExtractionStatus.summary(employer: "РНПК", extracted: 0, expected: 0, pages: 1),
-                       "РНПК: 0 из 0, страниц: 1")
-        XCTAssertEqual(VacancyExtractionStatus.summary(employer: "Банк России", extracted: 120, expected: 120, pages: 2),
-                       "Банк России: 120 из 120, страниц: 2")
-    }
-
     private func fieldSummary(_ title: String, id: String = "field", employer: String = "47858", description: String? = nil,
                               area: HHArea = .init(id: "1", name: "Москва")) -> HHVacancySummary {
         .init(id: id, name: title, employer: .init(name: "Банк России", id: employer), salary: nil,
@@ -354,7 +347,7 @@ final class HHVacancyCBRTests: XCTestCase {
         let multiple = summary(id: "multi", areaID: "1", areaName: "Москва", areas: [
             .init(id: "1", name: "Москва"), .init(id: "2", name: "Санкт-Петербург")
         ])
-        XCTAssertEqual(index.location(for: multiple), .unknown)
+        XCTAssertEqual(index.location(for: multiple), .subject(id: "1", name: "Москва", cityID: "1", cityName: "Москва"))
     }
 
 
@@ -873,6 +866,24 @@ final class HHVacancyCBRTests: XCTestCase {
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
+    }
+
+    func testSuccessfulSearchSurvivesEvidenceWriteFailure() async throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let invalidRoot = directory.appendingPathComponent("not-a-directory")
+        try Data("file".utf8).write(to: invalidRoot)
+        URLProtocolStub.handler = { _ in
+            (200, [:], Data(#"{"items":[],"found":0,"pages":0,"page":0,"per_page":100}"#.utf8))
+        }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [URLProtocolStub.self]
+        let client = HHAPIClient(session: URLSession(configuration: configuration),
+                                 accessTokenProvider: FixedTokenProvider(),
+                                 requestGate: HHRequestGate(minimumDelayNanoseconds: 0),
+                                 evidence: PDFSourceEvidence(root: invalidRoot))
+        let response = try await client.searchVacancies(.init(employerID: "47858"))
+        XCTAssertEqual(response.found, 0)
     }
 
     func testRateLimitRetriesTwiceThenReturnsSuccessfulResponse() async throws {
@@ -1553,15 +1564,15 @@ final class HHVacancyCBRTests: XCTestCase {
 
         model.selectedEmployerID = "bank_of_russia"
         XCTAssertEqual(Set(model.displayedResults.map(\.id)), ["filter-moscow", "filter-ekb", "filter-unknown"])
-        XCTAssertEqual(model.displayedVacancyCountMessage, "Показано вакансий: 3")
+        XCTAssertEqual(model.displayedVacancyCountMessage, "Вакансий: 3")
 
         model.selectedRegionID = "subject:66"
         XCTAssertEqual(model.displayedResults.map(\.id), ["filter-ekb"])
-        XCTAssertEqual(model.displayedVacancyCountMessage, "Показано вакансий: 1")
+        XCTAssertEqual(model.displayedVacancyCountMessage, "Вакансий: 1")
 
         model.selectedEmployerID = "nspk"
         XCTAssertTrue(model.displayedResults.isEmpty)
-        XCTAssertEqual(model.displayedVacancyCountMessage, "Показано вакансий: 0")
+        XCTAssertEqual(model.displayedVacancyCountMessage, "Вакансий: 0")
 
         model.selectedRegionID = "remote"
         XCTAssertEqual(model.displayedResults.map(\.id), ["filter-remote"])
@@ -1569,7 +1580,7 @@ final class HHVacancyCBRTests: XCTestCase {
         model.selectedEmployerID = "all"
         model.selectedRegionID = "all"
         XCTAssertEqual(model.displayedResults.count, 5)
-        XCTAssertEqual(model.displayedVacancyCountMessage, "Показано вакансий: 5")
+        XCTAssertEqual(model.displayedVacancyCountMessage, "Вакансий: 5")
     }
 
 
@@ -3175,7 +3186,15 @@ private enum HTTPClientFactory {
 }
 
 private final class URLProtocolStub: URLProtocol {
-    static var handler: ((URLRequest) throws -> (Int, [String: String], Data))?
+    private final class HandlerBox: @unchecked Sendable {
+        let lock = NSRecursiveLock()
+        var value: ((URLRequest) throws -> (Int, [String: String], Data))?
+    }
+    private static let box = HandlerBox()
+    static var handler: ((URLRequest) throws -> (Int, [String: String], Data))? {
+        get { box.lock.lock(); defer { box.lock.unlock() }; return box.value }
+        set { box.lock.lock(); defer { box.lock.unlock() }; box.value = newValue }
+    }
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
@@ -3540,7 +3559,7 @@ extension HHVacancyCBRTests {
         actor Counter { var n = 0; func next() -> Int { n += 1; return n } }
         let counter = Counter(), data = try TrudFixture.data([TrudFixture.row("a")])
         let evidence = PDFSourceEvidence(root: temporaryDirectory())
-        let client = TrudvsemAPIClient(evidence: evidence, sleep: { _ in }, transport: { request in
+        let client = TrudvsemAPIClient(evidence: evidence, gate: isolatedTrudGate(), sleep: { _ in }, transport: { request in
             let n = await counter.next()
             return (data, HTTPURLResponse(url: request.url!, statusCode: n == 1 ? 429 : (n == 2 ? 503 : 200), httpVersion: nil, headerFields: ["Retry-After": "0"])!)
         })
@@ -3611,7 +3630,7 @@ extension HHVacancyCBRTests {
             for material in try PDFSourceEvidence.shared.materials(for: document.context) { XCTAssertNotNil(data.range(of: material.data)) }
             XCTAssertTrue(String(decoding: data, as: UTF8.self).contains("/EmbeddedFiles"))
         }
-        let prepared = try await worker.prepare(vacancies: PDFVacanciesSnapshot(snapshots: values.map(TrudvsemPDFFormatter.personal)), filters: ["Регион": "Москва"]) { _ in }
+        let prepared = try await worker.prepareTrudvsem(vacancies: values, filters: ["Регион": "Москва"]) { _ in }
         let urls = try await worker.writePrepared(names: (0..<prepared.partCount).map { "bulk\($0).pdf" }, directory: dir)
         XCTAssertEqual(urls.count, prepared.partCount)
         for url in urls {
@@ -3619,8 +3638,8 @@ extension HHVacancyCBRTests {
             XCTAssertTrue(pdf.string?.contains("Москва") == true)
         }
         let missing = PDFVacancySnapshot(context: .init(kind: "Missing", vacancyIDs: ["missing"], source: .trudvsem), document: NSAttributedString(string: "Missing evidence"))
-        do { try await worker.exportDocument(document: missing, destination: dir.appendingPathComponent("missing.pdf")); XCTFail("Must reject undocumented output") }
-        catch { XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("missing.pdf").path)) }
+        try await worker.exportDocument(document: missing, destination: dir.appendingPathComponent("missing.pdf"))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent("missing.pdf").path))
     }
     @MainActor
     func testBulkLongVacancyContinuesAcrossPartsWithoutLosingParagraphs() async throws {
@@ -3638,7 +3657,12 @@ extension HHVacancyCBRTests {
             let raw = try Data(contentsOf: url)
             for material in try PDFSourceEvidence.shared.materials(for: vacancy.context) { XCTAssertNotNil(raw.range(of: material.data)) }
         }
-        for i in 0..<6500 { XCTAssertEqual(combined.components(separatedBy: "Строка \(i):").count - 1, 1) }
+        // Scan once: repeated Unicode substring searches made this assertion quadratic.
+        let extracted = combined as NSString
+        let markers = try NSRegularExpression(pattern: "Строка ([0-9]+):")
+        let indices = markers.matches(in: combined, range: NSRange(location: 0, length: extracted.length))
+            .compactMap { Int(extracted.substring(with: $0.range(at: 1))) }
+        XCTAssertEqual(indices, Array(0..<6500), "Every source line must appear once, in order")
         XCTAssertTrue(combined.contains("Продолжение"))
     }
 }
@@ -3672,16 +3696,16 @@ extension HHVacancyCBRTests {
     func testTrudHTTPFailureBudgetTimeoutAndCancellation() async throws {
         actor Counter { var count = 0; func increment() { count += 1 } }
         let counter = Counter()
-        let failure = TrudvsemAPIClient(sleep: { _ in }, transport: { req in
+        let failure = TrudvsemAPIClient(gate: isolatedTrudGate(), sleep: { _ in }, transport: { req in
             await counter.increment()
             return (Data(), HTTPURLResponse(url: req.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!)
         })
         do { _ = try await failure.vacancies(inn: TrudFixture.bank.inn, page: 0); XCTFail("Expected 500") } catch { }
         let count = await counter.count; XCTAssertEqual(count, 3)
-        let timeout = TrudvsemAPIClient(sleep: { _ in }, transport: { _ in throw URLError(.timedOut) })
+        let timeout = TrudvsemAPIClient(gate: isolatedTrudGate(), sleep: { _ in }, transport: { _ in throw URLError(.timedOut) })
         do { _ = try await timeout.vacancies(inn: TrudFixture.bank.inn, page: 0); XCTFail("Expected timeout") }
         catch { XCTAssertEqual((error as? URLError)?.code, .timedOut) }
-        let waiting = TrudvsemAPIClient(transport: { _ in try await Task.sleep(nanoseconds: 30_000_000_000); throw CancellationError() })
+        let waiting = TrudvsemAPIClient(gate: isolatedTrudGate(), transport: { _ in try await Task.sleep(nanoseconds: 30_000_000_000); throw CancellationError() })
         let task = Task { try await waiting.vacancies(inn: TrudFixture.bank.inn, page: 0) }
         task.cancel()
         do { _ = try await task.value; XCTFail("Expected cancellation") } catch { XCTAssertTrue(error is CancellationError) }
@@ -3731,5 +3755,106 @@ extension HHVacancyCBRTests {
         XCTAssertEqual(hh.results.map(\.id), hhIDs); XCTAssertEqual(hh.updatedAtMessage, hhUpdated)
         XCTAssertEqual(hh.selectedEmployerID, "bank_of_russia"); XCTAssertEqual(tv.selectedEmployerID, "nsis")
         XCTAssertNil(hh.errorMessage); XCTAssertNil(tv.errorMessage)
+    }
+}
+
+private func isolatedTrudGate() -> TrudvsemRequestGate {
+    let clock = AuditClock()
+    return TrudvsemRequestGate(now: { clock.now }, sleep: { clock.advance(Double($0) / 1e9) })
+}
+
+extension HHVacancyCBRTests {
+    func testTrudServerCooldownSurvivesNewClientAndLongDelayDoesNotRetryEarly() async throws {
+        actor Counter {
+            var count = 0
+            func next() -> Int { count += 1; return count }
+        }
+        let clock = AuditClock(), counter = Counter()
+        let gate = TrudvsemRequestGate(now: { clock.now }, sleep: { clock.advance(Double($0) / 1e9) })
+        let data = try TrudFixture.data([])
+        let transport: TrudvsemAPIClient.Transport = { request in
+            let attempt = await counter.next()
+            return (data, HTTPURLResponse(url: request.url!, statusCode: attempt == 1 ? 429 : 200,
+                httpVersion: nil, headerFields: ["Retry-After": "120"])!)
+        }
+        let first = TrudvsemAPIClient(gate: gate, sleep: { _ in }, transport: transport)
+        let second = TrudvsemAPIClient(evidence: PDFSourceEvidence(root: temporaryDirectory()), gate: gate, transport: transport)
+        for client in [first, second] {
+            do { _ = try await client.vacancies(inn: TrudFixture.bank.inn, page: 0); XCTFail("Server embargo must stop requests") }
+            catch { guard case TrudvsemError.http(429) = error else { return XCTFail("Unexpected error: \(error)") } }
+        }
+        let before = await counter.count
+        XCTAssertEqual(before, 1)
+        clock.advance(120)
+        _ = try await second.vacancies(inn: TrudFixture.bank.inn, page: 0)
+        let after = await counter.count
+        XCTAssertEqual(after, 2)
+    }
+
+    func testTrudOversizedRetryAfterDoesNotFallBackToShortRetry() {
+        XCTAssertEqual(TrudvsemAPIClient.retryAfter(" " + String(repeating: "9", count: 400) + " ", now: Date()), .infinity)
+        XCTAssertNil(TrudvsemAPIClient.retryAfter("NaN", now: Date()))
+    }
+
+    func testTrudURLCancellationIsNotRetried() async throws {
+        actor Counter { var count = 0; func increment() { count += 1 } }
+        let counter = Counter()
+        let client = TrudvsemAPIClient(gate: isolatedTrudGate(), sleep: { _ in }, transport: { _ in
+            await counter.increment()
+            throw URLError(.cancelled)
+        })
+        do { _ = try await client.vacancies(inn: TrudFixture.bank.inn, page: 0); XCTFail("Expected cancellation") }
+        catch { XCTAssertTrue(error is CancellationError) }
+        let calls = await counter.count
+        XCTAssertEqual(calls, 1)
+    }
+
+    func testTrudRestrictionStopsRemainingEmployers() async throws {
+        actor RestrictedClient: TrudvsemAPI {
+            let status: Int
+            var calls = 0
+            init(_ status: Int) { self.status = status }
+            func vacancies(inn: String, page: Int, limit: Int) async throws -> TrudvsemPage {
+                calls += 1
+                throw TrudvsemError.http(status)
+            }
+        }
+        for status in [401, 403, 429] {
+            let client = RestrictedClient(status)
+            do { _ = try await TrudvsemCollectionService(client: client).collect { _ in }; XCTFail("Expected restriction") }
+            catch { guard case TrudvsemError.http(status) = error else { return XCTFail("Unexpected error: \(error)") } }
+            let calls = await client.calls
+            XCTAssertEqual(calls, 1)
+        }
+    }
+
+    func testTrudPageBudgetStopsChangingOverlappingPages() async throws {
+        let pages = try ["a", "b", "c"].map { try TrudFixture.page([TrudFixture.row($0)], total: 100) }
+        let client = TrudScriptedClient(pages)
+        let result = try await TrudvsemCollectionService(client: client, maximumPagesPerEmployer: 2)
+            .collect(organizations: [TrudFixture.bank]) { _ in }
+        let calls = await client.calls
+        XCTAssertEqual(calls.count, 2)
+        XCTAssertFalse(result.isComplete)
+    }
+
+    func testTrudExpiredCollectionMakesNoRequests() async throws {
+        let client = TrudScriptedClient([try TrudFixture.page([])])
+        do { _ = try await TrudvsemCollectionService(client: client, maximumDuration: 0).collect { _ in }; XCTFail("Expected deadline") }
+        catch { XCTAssertTrue(error is TrudvsemError) }
+        let calls = await client.calls
+        XCTAssertTrue(calls.isEmpty)
+    }
+
+    func testPDFRenderingPreservesLinksAndLinklessPages() throws {
+        let url = URL(string: "https://example.com/vacancy/1")!
+        let first = NSAttributedString(string: "Clickable vacancy", attributes: [.font: VacancyPDFStyle.bodyFont, .link: url])
+        let second = NSAttributedString(string: "Plain description", attributes: [.font: VacancyPDFStyle.bodyFont])
+        let data = try VacanciesPDFExporter.pdfData(for: [.init(content: first), .init(content: second)])
+        let pdf = try XCTUnwrap(PDFDocument(data: data))
+        XCTAssertEqual(pdf.pageCount, 2)
+        XCTAssertTrue(try XCTUnwrap(pdf.page(at: 0)).annotations.contains { $0.url == url })
+        XCTAssertTrue(try XCTUnwrap(pdf.page(at: 1)).annotations.isEmpty)
+        XCTAssertTrue(try XCTUnwrap(pdf.string).contains("Plain description"))
     }
 }

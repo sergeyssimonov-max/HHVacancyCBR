@@ -600,13 +600,17 @@ final class VacancyPDFDocumentBuilder {
         provenance("Идентификаторы вакансии и работодателя — номера, присвоенные hh.ru. По ним можно найти объявление и карточку организации. Дата публикации, статус и приём откликов приведены по сведениям hh.ru.")
     }
 
-    func sourceEvidence(_ context: DocumentContext) {
-        let records = context.observationIDs.compactMap { try? PDFSourceEvidence.shared.observation($0) }
+    func sourceEvidence(_ context: DocumentContext, records: [APIObservation]? = nil) {
+        let records = records ?? context.observationIDs.compactMap { try? PDFSourceEvidence.shared.observation($0) }
+        if records.count < context.observationIDs.count || records.isEmpty {
+            section("Предупреждение об исходных данных")
+            provenance("Исходный ответ для части вакансий не сохранился или повреждён. Его контрольная сумма не подтверждена. Документ содержит сохранённые сведения без подтверждения исходным ответом.")
+        }
         guard !records.isEmpty else { return }
         let blockStart = document.length
         section("Проверка исходных данных")
         field("Хеш-функция", MaterialHash.displayName)
-        provenance("Хеш рассчитан по исходным байтам ответа API, приложенного к PDF. Совпадение хеша при повторном расчёте подтверждает неизменность сохранённого ответа.")
+        provenance("Хеш рассчитан по байтам ответа, приложенного к PDF. Совпадение хеша подтверждает только согласованность байтов и контрольной суммы; оно не доказывает происхождение ответа и время его получения.")
         for (index, record) in records.enumerated() {
             field("Ответ API №\(index + 1)", record.endpoint + " · сохранён " + VacancyPDFStyle.utcDate(record.receivedAt))
             field("Запрос", record.method + " · " + record.parameters.keys.sorted().map { "\($0)=\(record.parameters[$0]!)" }.joined(separator: "&"))
@@ -1095,7 +1099,6 @@ struct PDFVacanciesSnapshot: @unchecked Sendable {
         self.values = snapshots
     }
 
-    @MainActor
     init(snapshots: [PDFVacancySnapshot]) {
         values = snapshots
     }
@@ -1261,6 +1264,44 @@ actor PDFExportWorker {
 
     init() {}
 
+    /// Trudvsem uses plain source fields, so formatting can run on the worker too.
+    func prepareTrudvsem(
+        vacancies: [TrudvsemVacancy],
+        filters: [String: String] = [:],
+        progress: @escaping @MainActor @Sendable (BulkPDFExportProgress) -> Void
+    ) async throws -> PreparedExport {
+        discardPreparedExport()
+        let observations = try verifiedObservations(for: vacancies.map(\.context))
+        var snapshots: [PDFVacancySnapshot] = []
+        snapshots.reserveCapacity(vacancies.count)
+        for vacancy in vacancies {
+            try Task.checkCancellation()
+            snapshots.append(autoreleasepool {
+                TrudvsemPDFFormatter.personal(vacancy, records: vacancy.context.observationIDs.compactMap { observations[$0] })
+            })
+        }
+        return try await prepare(vacancies: PDFVacanciesSnapshot(snapshots: snapshots), filters: filters, progress: progress)
+    }
+
+    func exportTrudvsemPersonal(vacancy: TrudvsemVacancy, destination: URL) throws {
+        try Task.checkCancellation()
+        try exportDocument(document: TrudvsemPDFFormatter.personal(vacancy), destination: destination)
+    }
+
+    func exportTrudvsemStatistics(vacancies: [TrudvsemVacancy], filters: [String: String], destination: URL) throws {
+        try Task.checkCancellation()
+        try exportDocument(document: TrudvsemPDFFormatter.statistics(vacancies, filters: filters), destination: destination)
+    }
+
+    private func verifiedObservations(for contexts: [DocumentContext]) throws -> [String: APIObservation] {
+        var observations: [String: APIObservation] = [:]
+        for id in Set(contexts.flatMap(\.observationIDs)) {
+            try Task.checkCancellation()
+            observations[id] = try? PDFSourceEvidence.shared.observation(id)
+        }
+        return observations
+    }
+
     func prepare(
         vacancies: PDFVacanciesSnapshot,
         filters: [String: String] = [:],
@@ -1278,6 +1319,14 @@ actor PDFExportWorker {
             var contexts: [DocumentContext]
         }
         let started = PDFSourceJSON.timestamp(Date())
+        // Cache only within this export. Publication verifies the raw materials again.
+        let observations = try verifiedObservations(for: vacancies.values.map(\.context))
+        struct HeaderKey: Hashable {
+            let source: String
+            let vacancyCount: Int
+            let observationIDs: [String]
+        }
+        var headerPageCounts: [HeaderKey: Int] = [:]
         var chunks: [Chunk] = []
         var current = Chunk(pages: [], contexts: [])
         func context(_ contexts: [DocumentContext]) -> DocumentContext {
@@ -1291,27 +1340,34 @@ actor PDFExportWorker {
             builder.field("Сформирован", VacancyPDFStyle.utcDate(started))
             builder.field("Часть", "\(part) из \(total)")
             if continuation { builder.field("Продолжение", "Полная карточка вакансии продолжается с предыдущей части") }
-            builder.sourceEvidence(c)
+            builder.sourceEvidence(c, records: c.observationIDs.compactMap { observations[$0] })
             builder.identify(c)
-            return VacanciesPDFExporter.pages(for: builder.document)
+            return autoreleasepool { VacanciesPDFExporter.pages(for: builder.document) }
+        }
+        func headerPageCount(_ c: DocumentContext) -> Int {
+            let key = HeaderKey(source: c.source.rawValue, vacancyCount: c.vacancyIDs.count, observationIDs: c.observationIDs)
+            if let count = headerPageCounts[key] { return count }
+            let count = header(c, part: 999999, total: 999999, continuation: true).count
+            headerPageCounts[key] = count
+            return count
         }
         let limit = VacanciesPDFExporter.maximumPagesPerFile
         for (index, vacancy) in vacancies.values.enumerated() {
             try Task.checkCancellation()
-            var pages = VacanciesPDFExporter.pages(for: vacancy.attributedDocument)
+            var pages = autoreleasepool { VacanciesPDFExporter.pages(for: vacancy.attributedDocument) }[...]
             let candidateContexts = current.contexts + [vacancy.context]
-            let overhead = header(context(candidateContexts), part: 999999, total: 999999, continuation: true).count
+            let overhead = headerPageCount(context(candidateContexts))
             if !current.pages.isEmpty && current.pages.count + pages.count + overhead > limit {
                 chunks.append(current); current = Chunk(pages: [], contexts: [])
             }
             while !pages.isEmpty {
                 try Task.checkCancellation()
                 let contexts = current.contexts + [vacancy.context]
-                let capacity = limit - header(context(contexts), part: 999999, total: 999999, continuation: true).count - current.pages.count
+                let capacity = limit - headerPageCount(context(contexts)) - current.pages.count
                 guard capacity > 0 else { throw PDFSourceError.invalid("Реквизиты источников превышают лимит части") }
                 let count = min(capacity, pages.count)
                 current.pages += pages.prefix(count); current.contexts = contexts
-                pages.removeFirst(count)
+                pages = pages.dropFirst(count)
                 if !pages.isEmpty { chunks.append(current); current = Chunk(pages: [], contexts: []) }
             }
             await progress(.init(completedVacancies: index + 1, totalVacancies: vacancies.values.count))
@@ -1320,15 +1376,19 @@ actor PDFExportWorker {
         var parts: [PreparedPart] = []
         var previousIDs = Set<String>()
         var pageOffset = 0
-        for (index, chunk) in chunks.enumerated() {
+        for index in chunks.indices {
             try Task.checkCancellation()
+            let chunk = chunks[index]
+            chunks[index] = Chunk(pages: [], contexts: [])
             await progress(.init(completedVacancies: vacancies.values.count, totalVacancies: vacancies.values.count,
                                  stage: "Формирование части \(index + 1) из \(chunks.count)"))
             let c = context(chunk.contexts)
             let continuation = !previousIDs.isDisjoint(with: c.vacancyIDs)
             let pages = header(c, part: index + 1, total: chunks.count, continuation: continuation) + chunk.pages
             guard pages.count <= limit else { throw PDFSourceError.invalid("Превышен лимит страниц") }
-            let rendered = try documentedData(pages: pages, context: c, pageOffset: pageOffset)
+            let rendered = try autoreleasepool {
+                try documentedData(pages: pages, context: c, pageOffset: pageOffset)
+            }
             pageOffset += pages.count
             let file = staging.appendingPathComponent("part-\(index).pdf")
             try rendered.data.write(to: file, options: .atomic)
@@ -1564,7 +1624,15 @@ final class VacanciesPDFExporter: VacanciesPDFExporting {
             if paragraph.location > lines[first].start {
                 var paragraphFirst = next
                 while paragraphFirst > first + 1, lines[paragraphFirst].start > paragraph.location { paragraphFirst -= 1 }
-                let paragraphLast = lines.lastIndex { $0.start < NSMaxRange(paragraph) } ?? index
+                // Line starts are sorted; avoid scanning the entire document at every page break.
+                var lower = index, upper = lines.count
+                let paragraphEnd = NSMaxRange(paragraph)
+                while lower < upper {
+                    let middle = lower + (upper - lower) / 2
+                    if lines[middle].start < paragraphEnd { lower = middle + 1 }
+                    else { upper = middle }
+                }
+                let paragraphLast = max(index, lower - 1)
                 // Oversized source paragraphs must use the remaining page space and continue.
                 if lines[paragraphLast].maxY - lines[paragraphFirst].minY <= pageHeight { next = paragraphFirst }
             }
@@ -1631,20 +1699,26 @@ final class VacanciesPDFExporter: VacanciesPDFExporting {
                     ),
                     options: [.usesLineFragmentOrigin, .usesFontLeading]
                 )
-                let linkStorage = NSTextStorage(attributedString: monochromeContent)
-                let linkLayout = NSLayoutManager()
-                let linkContainer = NSTextContainer(size: NSSize(width: VacancyPDFDefaults.paperSize.width - VacancyPDFDefaults.horizontalMargin * 2, height: .greatestFiniteMagnitude))
-                linkContainer.lineFragmentPadding = 0
-                linkStorage.addLayoutManager(linkLayout)
-                linkLayout.addTextContainer(linkContainer)
-                linkLayout.ensureLayout(for: linkContainer)
+                var links: [(URL, NSRange)] = []
                 page.content.enumerateAttribute(.link, in: NSRange(location: 0, length: page.content.length)) { value, range, _ in
                     guard let value, let url = (value as? URL) ?? URL(string: String(describing: value)) else { return }
-                    let glyphs = linkLayout.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
-                    linkLayout.enumerateEnclosingRects(forGlyphRange: glyphs, withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0), in: linkContainer) { rect, _ in
-                        context.setURL(url as CFURL, for: CGRect(x: rect.minX + VacancyPDFDefaults.horizontalMargin,
-                            y: VacancyPDFDefaults.paperSize.height - VacancyPDFDefaults.verticalMargin - rect.maxY,
-                            width: rect.width, height: rect.height))
+                    links.append((url, range))
+                }
+                if !links.isEmpty {
+                    let linkStorage = NSTextStorage(attributedString: monochromeContent)
+                    let linkLayout = NSLayoutManager()
+                    let linkContainer = NSTextContainer(size: NSSize(width: VacancyPDFDefaults.paperSize.width - VacancyPDFDefaults.horizontalMargin * 2, height: .greatestFiniteMagnitude))
+                    linkContainer.lineFragmentPadding = 0
+                    linkStorage.addLayoutManager(linkLayout)
+                    linkLayout.addTextContainer(linkContainer)
+                    linkLayout.ensureLayout(for: linkContainer)
+                    for (url, range) in links {
+                        let glyphs = linkLayout.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+                        linkLayout.enumerateEnclosingRects(forGlyphRange: glyphs, withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0), in: linkContainer) { rect, _ in
+                            context.setURL(url as CFURL, for: CGRect(x: rect.minX + VacancyPDFDefaults.horizontalMargin,
+                                y: VacancyPDFDefaults.paperSize.height - VacancyPDFDefaults.verticalMargin - rect.maxY,
+                                width: rect.width, height: rect.height))
+                        }
                     }
                 }
                 let footerY = VacancyPDFDefaults.paperSize.height - 30

@@ -9,11 +9,17 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   build-and-test:
+    timeout-minutes: 30
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - name: Check configuration
         run: |
           test "$(uname -m)" = arm64
@@ -42,6 +48,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - name: Build Release with strict concurrency
         working-directory: HHVacancyCBR
         run: >-
@@ -58,6 +66,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       # XCUITest launches the app and its runner, so both are signed ad hoc
       # instead of skipping signing as the unit-test job does.
       - name: Test UI

@@ -1,7 +1,7 @@
 import Foundation
 import CryptoKit
 
-/// A matching digest verifies that the saved response bytes are unchanged.
+/// A matching digest checks consistency, not origin or time of receipt.
 enum MaterialHash {
     static let algorithm = "GOST-R-34.11-2012-512"
     static let displayName = "ГОСТ Р 34.11-2012 «Информационная технология. Криптографическая защита информации. Функция хэширования», 512 бит"
@@ -78,6 +78,7 @@ final class PDFSourceEvidence: @unchecked Sendable {
     static let shared = PDFSourceEvidence()
     private let configuredRoot: URL?
     private let lock = NSRecursiveLock()
+    private var lastPrunedAt = Date.distantPast
     init(root: URL? = nil) { configuredRoot = root }
     var root: URL { get throws {
         if let configuredRoot { return configuredRoot }
@@ -112,6 +113,10 @@ final class PDFSourceEvidence: @unchecked Sendable {
     @discardableResult
     func capture(data: Data, url: URL, status: Int, sent: Date, received: Date) throws -> APIObservation? {
         lock.lock(); defer { lock.unlock() }
+        if Date().timeIntervalSince(lastPrunedAt) > 3600 {
+            try? pruneExpiredResponses()
+            lastPrunedAt = Date()
+        }
         let source: VacancySource
         if url.host == "api.hh.ru", url.path == "/vacancies" || url.path.hasPrefix("/vacancies/") { source = .hh }
         else if url.host == "opendata.trudvsem.ru", url.path.hasPrefix("/api/v1/vacancies/") { source = .trudvsem }
@@ -149,14 +154,39 @@ final class PDFSourceEvidence: @unchecked Sendable {
         }
         return observation
     }
+    /// Bound disk usage independently of successful searches and both source tabs.
+    /// Older documents can still export with an explicit missing-material warning.
+    private func pruneExpiredResponses() throws {
+        let parent = try directory("observations")
+        let entries = try FileManager.default.contentsOfDirectory(at: parent,
+            includingPropertiesForKeys: [.contentModificationDateKey], options: [.skipsHiddenFiles])
+        var records: [(URL, Date, Int)] = []
+        for folder in entries where UUID(uuidString: folder.lastPathComponent) != nil {
+            let date = try folder.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate ?? .distantPast
+            let files = ["response.json", "observation.json"].map { folder.appendingPathComponent($0) }
+            let size = files.reduce(0) { $0 + ((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
+            records.append((folder, date, size))
+        }
+        var total = records.reduce(0) { $0 + $1.2 }
+        let cutoff = Date().addingTimeInterval(-30 * 86400)
+        for record in records.sorted(by: { $0.1 < $1.1 }) where record.1 < cutoff || total > 512 * 1024 * 1024 {
+            try FileManager.default.removeItem(at: record.0)
+            total -= record.2
+        }
+    }
+
     func observation(_ id: String) throws -> APIObservation {
+        try validatedObservation(id).record
+    }
+
+    private func validatedObservation(_ id: String) throws -> (record: APIObservation, data: Data) {
         try validID(id)
         let folder = try directory("observations").appendingPathComponent(id)
         let record = try JSONDecoder().decode(APIObservation.self, from: Data(contentsOf: folder.appendingPathComponent("observation.json")))
         guard record.version == 1, record.id == id else { throw PDFSourceError.invalid("Версия или ID наблюдения") }
         let raw = try Data(contentsOf: folder.appendingPathComponent("response.json"))
         guard raw.count == record.byteCount, try MaterialHash.digest(raw, algorithm: record.algorithm) == record.hash else { throw PDFSourceError.invalid("Повреждён ответ API") }
-        return record
+        return (record, raw)
     }
     struct Material {
         let path: String
@@ -170,18 +200,29 @@ final class PDFSourceEvidence: @unchecked Sendable {
         var covered = Set<String>()
         var hashes = Set<String>()
         for (index, id) in context.observationIDs.enumerated() {
-            let record = try observation(id)
+            try Task.checkCancellation()
+            let record: APIObservation
+            let raw: Data
+            do { (record, raw) = try validatedObservation(id) }
+            catch {
+                result.append(Material(path: "sources/unavailable-\(index + 1).txt",
+                    data: Data("Исходный ответ не сохранился или повреждён; контрольная сумма не подтверждена.".utf8),
+                    type: "source-warning", observationIDs: [id]))
+                continue
+            }
             guard record.resolvedSource == context.source else { throw PDFSourceError.invalid("Подмена источника") }
             covered.formUnion(record.vacancyIDs)
             guard !Set(record.vacancyIDs).isDisjoint(with: context.vacancyIDs) else { throw PDFSourceError.invalid("Несвязанный материал") }
             guard hashes.insert(record.hash).inserted else { continue }
-            let source = try directory("observations").appendingPathComponent(id)
             result.append(Material(path: String(format: "sources/response-%03d.json", index + 1),
-                                   data: try Data(contentsOf: source.appendingPathComponent("response.json")),
+                                   data: raw,
                                    type: "api-response", observationIDs: [id]))
         }
         guard Set(context.vacancyIDs).isSubset(of: covered), !context.vacancyIDs.isEmpty else {
-            throw PDFSourceError.invalid("Для части вакансий отсутствуют исходные ответы API. Обновите источник.")
+            result.append(Material(path: "sources/incomplete.txt",
+                data: Data("Для части вакансий исходные ответы отсутствуют или повреждены. Происхождение данных не подтверждено.".utf8),
+                type: "source-warning", observationIDs: []))
+            return result
         }
         return result
     }

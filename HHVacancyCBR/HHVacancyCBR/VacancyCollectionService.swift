@@ -4,7 +4,6 @@ struct VacancyCollectionProgress: Equatable, Sendable {
     let employerName: String
     let loadedCount: Int
     let partition: String
-    var finalStatus: String? = nil
 }
 
 /// An employer whose vacancies were not read completely: the count differs from
@@ -153,10 +152,7 @@ struct VacancyCollectionService: Sendable {
                                     actual: outcome.values.count, failures: outcome.failures))
             }
             await run.recordFinishedEmployer(employer.id, issues: issues)
-            let pages = await run.pageCount(for: employer.id)
-            await progress(.init(employerName: employer.name, loadedCount: outcome.values.count, partition: "",
-                finalStatus: VacancyExtractionStatus.summary(employer: employer.name, extracted: outcome.values.count,
-                    expected: initialResponse.found, pages: pages)))
+            await progress(.init(employerName: employer.name, loadedCount: outcome.values.count, partition: ""))
         }
         // At most two extra pages per refresh, worldwide, using the same pacing/retry budget.
         // Search hits are candidates only; never trust text search as classification evidence.
@@ -254,7 +250,10 @@ struct VacancyCollectionService: Sendable {
                 try await collectByDictionaries(request, employer: employer, progress: progress)
             }
         }
-        let midpoint = Date(timeIntervalSince1970: floor(start.timeIntervalSince1970 + span / 2))
+        let midpoint = Date(timeIntervalSince1970: floor((start.timeIntervalSince1970 + span / 2) / 300) * 300)
+        guard midpoint > start, midpoint < end else {
+            return try await collectByDictionaries(request, employer: employer, progress: progress)
+        }
         // Overlap the boundary: deduplication is safer than a gap for fractional timestamps.
         let secondStart = midpoint
         var combined = Outcome()
@@ -457,7 +456,6 @@ private actor CollectionRunClient: HHVacancyAPIClient {
     private let deadline: TimeInterval
     private let uptime: @Sendable () -> TimeInterval
     private var pagesByEmployer: [String: Int] = [:]
-    func pageCount(for employerID: String) -> Int { pagesByEmployer[employerID, default: 0] }
     private var requests = 0
     private var values: [String: HHVacancySummary] = [:]
     private var employerValues: [String: Set<String>] = [:]
