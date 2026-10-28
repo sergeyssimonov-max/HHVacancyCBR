@@ -20,7 +20,7 @@ final class VacancySearchViewModel: ObservableObject {
     private static let publicationDateParser = HHPublicationDateParser()
 
     @Published private(set) var results: [VacancySearchResult] = [] { didSet { displayedCache = nil } }
-    @Published private(set) var configuredEmployers: [EmployerConfigurationEntry] = []
+    @Published private(set) var configuredEmployers: [EmployerConfigurationEntry] = [] { didSet { displayedCache = nil } }
     @Published private(set) var expandedVacancyID: String?
     @Published private(set) var isLoading = false
     @Published private(set) var isPersistenceLoaded = false
@@ -170,8 +170,10 @@ final class VacancySearchViewModel: ObservableObject {
     var employerFilterOptions: [VacancyFilterOption] {
         var titlesByID: [String: String] = [:]
         for result in unfilteredResults {
-            guard let id = result.employerID, titlesByID[id] == nil else { continue }
-            titlesByID[organizationKey(forHH: id)] = result.employerName
+            guard let id = result.employerID else { continue }
+            let key = organizationKey(forHH: id)
+            guard titlesByID[key] == nil else { continue }
+            titlesByID[key] = result.employerName
         }
         // A configured employer remains selectable even when HH returns no vacancies.
         do {

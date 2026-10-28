@@ -92,7 +92,11 @@ struct TrudvsemAPIClient: TrudvsemAPI, Sendable {
                 try Task.checkCancellation()
                 guard (200...299).contains(response.statusCode) else { throw TrudvsemError.http(response.statusCode) }
                 var page = try TrudvsemPage(data: data)
-                page.observationID = try evidence.capture(data: data, url: url, status: response.statusCode, sent: sent, received: Date())?.id
+                do {
+                    page.observationID = try evidence.capture(data: data, url: url, status: response.statusCode, sent: sent, received: Date())?.id
+                } catch {
+                    NSLog("Не удалось сохранить исходный ответ trudvsem.ru для PDF: %@", error.localizedDescription)
+                }
                 return page
             } catch let error as URLError where error.code == .cancelled {
                 throw CancellationError()

@@ -267,7 +267,7 @@ enum VacancyPDFFormatter {
         let details = vacancy.details
 
         let context = suppliedContext ?? DocumentContext.vacancy(vacancy)
-        let isPersonalDocument = context.kind == "Сведения о вакансии"
+        let isPersonalDocument = context.kind == "Сведения о вакансии" && includeSourceEvidence
         if isPersonalDocument { builder.documentHeader(context) }
         builder.section(vacancy.name)
         builder.field("Работодатель", vacancy.employerName)
@@ -605,8 +605,9 @@ final class VacancyPDFDocumentBuilder {
         let records = records ?? context.observationIDs.compactMap { try? PDFSourceEvidence.shared.observation($0) }
         let blockStart = document.length
         section("Данные для проверки")
-        provenance("Файл содержит сохранённые ответы API и реквизиты их получения: адреса запросов, параметры, время по часам устройства, идентификаторы и контрольные суммы. Вложения содержат исходные данные JSON и, если источник их предоставил, разметку описания вакансии. Они не являются снимком внешнего вида страницы сайта.")
-        provenance("Материалы могут быть исследованы при судебной компьютерно-технической экспертизе с применением соответствующих методик, в том числе разработок ФБУ РФЦСЭ при Минюсте России. Суд может истребовать сведения у оператора площадки (статьи 57 и 79 ГПК РФ, статьи 66 и 82 АПК РФ). Происхождение и время размещения оцениваются с учётом всех доказательств.")
+        provenance("При наличии сохранённых ответов API файл включает их исходные данные и реквизиты получения: адреса запросов, параметры, время по часам устройства, идентификаторы и контрольные суммы. Вложения содержат JSON и, если источник предоставил, разметку описания вакансии. Они не являются снимком внешнего вида страницы сайта.")
+        provenance("Документы, полученные через интернет, могут представляться как письменные доказательства при соблюдении применимых условий: статья 71 Гражданского процессуального кодекса Российской Федерации и статья 75 Арбитражного процессуального кодекса Российской Федерации. Относимость, допустимость и достоверность оценивает суд.")
+        provenance("Материалы могут быть исследованы при судебной компьютерно-технической экспертизе с применением соответствующих экспертных методик. При необходимости суд может истребовать сведения у оператора площадки (статьи 57 и 79 Гражданского процессуального кодекса Российской Федерации; статьи 66 и 82 Арбитражного процессуального кодекса Российской Федерации). Для фиксации содержимого сайта возможно обеспечение доказательств нотариусом (статьи 102 и 103 Основ законодательства Российской Федерации о нотариате); данный файл не является нотариальным протоколом.")
         let covered = Set(records.flatMap(\.vacancyIDs))
         if records.count < context.observationIDs.count || !Set(context.vacancyIDs).isSubset(of: covered) {
             provenance("Исходный ответ для части вакансий не сохранился или повреждён. Его контрольная сумма не подтверждена.")
@@ -1325,12 +1326,12 @@ actor PDFExportWorker {
         let started = PDFSourceJSON.timestamp(Date())
         // Cache only within this export. Publication verifies the raw materials again.
         let observations = try verifiedObservations(for: vacancies.values.map(\.context))
-        struct HeaderKey: Hashable {
+        struct EvidenceKey: Hashable {
             let source: String
-            let vacancyCount: Int
             let observationIDs: [String]
+            let hasMissingEvidence: Bool
         }
-        var headerPageCounts: [HeaderKey: Int] = [:]
+        var evidencePageCounts: [EvidenceKey: Int] = [:]
         var chunks: [Chunk] = []
         var current = Chunk(pages: [], contexts: [])
         func context(_ contexts: [DocumentContext]) -> DocumentContext {
@@ -1354,11 +1355,17 @@ actor PDFExportWorker {
             return autoreleasepool { VacanciesPDFExporter.pages(for: builder.document) }
         }
         func headerPageCount(_ c: DocumentContext) -> Int {
-            let key = HeaderKey(source: c.source.rawValue, vacancyCount: c.vacancyIDs.count, observationIDs: c.observationIDs)
-            if let count = headerPageCounts[key] { return count }
-            let count = header(c, part: 999999, total: 999999, continuation: true).count + evidencePages(c).count
-            headerPageCounts[key] = count
-            return count
+            let records = c.observationIDs.compactMap { observations[$0] }
+            let covered = Set(records.flatMap(\.vacancyIDs))
+            let missing = records.count < c.observationIDs.count || !Set(c.vacancyIDs).isSubset(of: covered)
+            let key = EvidenceKey(source: c.source.rawValue, observationIDs: c.observationIDs, hasMissingEvidence: missing)
+            let evidenceCount: Int
+            if let cached = evidencePageCounts[key] { evidenceCount = cached }
+            else {
+                evidenceCount = evidencePages(c).count
+                evidencePageCounts[key] = evidenceCount
+            }
+            return header(c, part: 999999, total: 999999, continuation: true).count + evidenceCount
         }
         let limit = VacanciesPDFExporter.maximumPagesPerFile
         for (index, vacancy) in vacancies.values.enumerated() {
@@ -1395,9 +1402,9 @@ actor PDFExportWorker {
             let continuation = !previousIDs.isDisjoint(with: c.vacancyIDs)
             let headerPages = header(c, part: index + 1, total: chunks.count, continuation: continuation)
             let combined = NSMutableAttributedString(attributedString: headerPages.last!.content)
-            combined.append(chunk.pages[0].content)
-            let leadingPages = autoreleasepool { VacanciesPDFExporter.pages(for: combined) }
-            let pages = Array(headerPages.dropLast()) + leadingPages + Array(chunk.pages.dropFirst()) + evidencePages(c)
+            for page in chunk.pages { combined.append(page.content) }
+            let bodyPages = autoreleasepool { VacanciesPDFExporter.pages(for: combined) }
+            let pages = Array(headerPages.dropLast()) + bodyPages + evidencePages(c)
             guard pages.count <= limit else { throw PDFSourceError.invalid("Превышен лимит страниц") }
             let rendered = try autoreleasepool {
                 try documentedData(pages: pages, context: c, pageOffset: pageOffset)

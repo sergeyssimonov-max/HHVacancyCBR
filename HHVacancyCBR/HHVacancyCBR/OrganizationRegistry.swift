@@ -81,12 +81,22 @@ struct TrudvsemEmployerConfigurationStore: Sendable {
         guard value.version == 1, Set(value.employers.map(\.organizationKey)).count == value.employers.count else {
             throw TrudvsemError.invalid("Версия или дубликаты конфигурации работодателей")
         }
+        var merged = value
+        var changed = false
         for org in OrganizationRegistry.available(on: .trudvsem) {
-            guard let entry = value.employers.first(where: { $0.organizationKey == org.id }), entry.inn == org.inn, entry.ogrn == org.ogrn else {
-                throw TrudvsemError.invalid("Реквизиты \(org.name) в конфигурации")
+            if let index = merged.employers.firstIndex(where: { $0.organizationKey == org.id }) {
+                let entry = merged.employers[index]
+                if entry.inn != org.inn || entry.ogrn != org.ogrn {
+                    merged.employers[index] = .init(organizationKey: org.id, inn: org.inn, ogrn: org.ogrn, confirmedCompanyCodes: [])
+                    changed = true
+                }
+            } else {
+                merged.employers.append(.init(organizationKey: org.id, inn: org.inn, ogrn: org.ogrn, confirmedCompanyCodes: []))
+                changed = true
             }
         }
-        return value
+        if changed { try save(merged) }
+        return merged
     }
     func recordVerifiedCodes(_ vacancies: [TrudvsemVacancy]) throws {
         var value = try loadOrCreate()

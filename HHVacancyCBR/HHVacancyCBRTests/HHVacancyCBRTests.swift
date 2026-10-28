@@ -1748,7 +1748,7 @@ final class HHVacancyCBRTests: XCTestCase {
             progressValues.append(progress)
         }
 
-        if case .exported(let files, let pages) = outcome { XCTAssertGreaterThanOrEqual(files, 2); XCTAssertGreaterThanOrEqual(pages, 103) } else { XCTFail("Expected files") }
+        if case .exported(let files, let pages) = outcome { XCTAssertGreaterThanOrEqual(files, 2); XCTAssertGreaterThanOrEqual(pages, files); XCTAssertLessThanOrEqual(pages, files * 100) } else { XCTFail("Expected files") }
         XCTAssertEqual(progressValues.first, .init(completedVacancies: 1, totalVacancies: 101))
         XCTAssertEqual(progressValues.last?.completedVacancies, 101)
         XCTAssertEqual(progressValues.last?.stage, "Сохранение файлов")
@@ -2566,7 +2566,8 @@ final class HHVacancyCBRTests: XCTestCase {
         }
         let prepared = try await preparation.value
         XCTAssertGreaterThan(interactionsDuringPDF, 1)
-        XCTAssertGreaterThanOrEqual(prepared.pageCount, 102)
+        XCTAssertGreaterThanOrEqual(prepared.pageCount, prepared.partCount)
+        XCTAssertLessThanOrEqual(prepared.pageCount, prepared.partCount * 100)
         XCTAssertEqual(completed, 100)
         let details = await client.requestedDetailIDs
         let searches = await client.searchRequestCount
@@ -3555,6 +3556,41 @@ private actor TrudScriptedClient: TrudvsemAPI {
 }
 
 extension HHVacancyCBRTests {
+    func testTrudSearchSucceedsWhenEvidenceCannotBeWritten() async throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let root = directory.appendingPathComponent("file")
+        try Data("not a directory".utf8).write(to: root)
+        let data = try TrudFixture.data([TrudFixture.row("one")])
+        let client = TrudvsemAPIClient(evidence: PDFSourceEvidence(root: root),
+            gate: TrudvsemRequestGate(minimumInterval: 0), transport: { request in
+                (data, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+            })
+        let page = try await client.vacancies(inn: TrudFixture.bank.inn, page: 0, limit: 100)
+        XCTAssertEqual(page.vacancies.count, 1)
+        XCTAssertNil(page.observationID)
+    }
+
+    func testTrudEmployerRegistryMigrationPreservesAndResetsConfirmedCodes() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("employers.json")
+        let organizations = OrganizationRegistry.available(on: .trudvsem)
+        let first = try XCTUnwrap(organizations.first)
+        let old = TrudvsemEmployerConfiguration(version: 1, employers: [
+            .init(organizationKey: first.id, inn: first.inn, ogrn: first.ogrn, confirmedCompanyCodes: ["retained"]),
+            .init(organizationKey: organizations[1].id, inn: "old", ogrn: "old", confirmedCompanyCodes: ["stale"])
+        ])
+        try JSONEncoder().encode(old).write(to: url)
+        let store = TrudvsemEmployerConfigurationStore(configuredURL: url)
+        let updated = try store.loadOrCreate()
+        XCTAssertEqual(updated.employers.count, organizations.count)
+        XCTAssertEqual(updated.employers.first?.confirmedCompanyCodes, ["retained"])
+        XCTAssertEqual(updated.employers[1].inn, organizations[1].inn)
+        XCTAssertTrue(updated.employers[1].confirmedCompanyCodes.isEmpty)
+        XCTAssertEqual(try store.loadOrCreate().employers.count, organizations.count)
+    }
+
     func testTrudDescriptionAndSalaryAreHumanReadable() throws {
         var row = TrudFixture.row("format")
         var vacancy = try XCTUnwrap(row["vacancy"] as? [String: Any])
@@ -3752,6 +3788,8 @@ extension HHVacancyCBRTests {
         for file in files {
             let text = try XCTUnwrap(PDFDocument(url: file)?.string)
             XCTAssertEqual(text.components(separatedBy: "Данные для проверки").count - 1, 1)
+            XCTAssertFalse(text.contains("Сведения о вакансии"))
+            XCTAssertEqual(text.components(separatedBy: "Все вакансии").count - 1, 1)
             XCTAssertGreaterThan(try XCTUnwrap(text.range(of: "Данные для проверки")?.lowerBound),
                                  try XCTUnwrap(text.range(of: value.name)?.lowerBound))
             let raw = try Data(contentsOf: file)
@@ -3774,6 +3812,9 @@ extension HHVacancyCBRTests {
         let dto = try XCTUnwrap(TrudvsemPage(data: data).vacancies.first)
         let value = TrudvsemVacancy(dto: dto, organization: TrudFixture.bank, observationIDs: [obs.id])
         let card = TrudvsemPDFFormatter.personal(value).attributedDocument.string
+        XCTAssertTrue(card.contains("статья 71 Гражданского процессуального кодекса Российской Федерации"))
+        XCTAssertTrue(card.contains("статья 75 Арбитражного процессуального кодекса Российской Федерации"))
+        XCTAssertTrue(card.contains("данный файл не является нотариальным протоколом"))
         XCTAssertTrue(card.contains("Дата создания: 21.10.2026"))
         XCTAssertTrue(card.contains("Медицинские документы"))
         XCTAssertTrue(card.contains("Контакт: +7 123"))

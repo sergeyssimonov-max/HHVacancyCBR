@@ -93,7 +93,9 @@ final class TrudvsemViewModel: ObservableObject {
         "Категория": fieldInstitutionsOnly ? "Полевые учреждения" : "Все вакансии", "Сортировка": "Сначала новые"] }
     func load() {
         guard !loaded else { return }; loaded = true
-        do { _ = try employerStore.loadOrCreate(); if let snapshot = try store.load() { results = snapshot.vacancies.filter { value in OrganizationRegistry.available(on: .trudvsem).contains { $0.id == value.organizationKey } }; updatedAt = snapshot.updatedAt; metrics = snapshot.metrics; statusMessage = "Показана сохранённая полная выборка." } }
+        do { _ = try employerStore.loadOrCreate() }
+        catch { errorMessage = "Не удалось прочитать конфигурацию работодателей: \(error.localizedDescription)" }
+        do { if let snapshot = try store.load() { results = snapshot.vacancies.filter { value in OrganizationRegistry.available(on: .trudvsem).contains { $0.id == value.organizationKey } }; updatedAt = snapshot.updatedAt; metrics = snapshot.metrics; statusMessage = "Показана сохранённая полная выборка." } }
         catch { errorMessage = "Не удалось прочитать снимок: \(error.localizedDescription)" }
     }
     func startRefresh() {

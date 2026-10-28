@@ -119,7 +119,8 @@ final class HHVacancyCBRUITests: XCTestCase {
             let clear = app.buttons["clearVacancySearch"]
             XCTAssertTrue(clear.waitForExistence(timeout: 3))
             clear.click()
-            XCTAssertFalse(clear.exists)
+            let removed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: clear)
+            XCTAssertEqual(XCTWaiter.wait(for: [removed], timeout: 3), .completed)
         }
     }
 

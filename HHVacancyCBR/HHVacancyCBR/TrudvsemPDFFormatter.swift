@@ -12,6 +12,7 @@ enum TrudvsemPDFFormatter {
         "contact_list": "Контакты", "contact_person": "Контактное лицо", "contact_type": "Способ связи", "contact_value": "Контакт",
         "phone": "Телефон", "email": "Электронная почта", "medicalCertificate": "Медицинская справка",
         "medicalDocuments": "Медицинские документы",
+        // Some responses use the Unicode fi ligature rather than ASCII "fi".
         "medicalCertiﬁcate": "Медицинская справка"
     ]
     private static func dateText(_ value: String?) -> String? {
@@ -111,9 +112,17 @@ enum TrudvsemPDFFormatter {
         let salaried = values.filter { $0.salary != nil || $0.dto.raw["salary_min"].number != nil || $0.dto.raw["salary_max"].number != nil }
         b.field("С зарплатой / без зарплаты", "\(salaried.count) / \(values.count - salaried.count)")
         let places = values.compactMap { $0.dto.raw["work-places"].number }
-        if !places.isEmpty { b.field("Рабочих мест (по указанным значениям)", String(places.reduce(0, +))) }
-        let dates = values.compactMap(\.created).sorted()
-        if let first = dates.first, let last = dates.last { b.field("Период дат создания", "\(dateText(first) ?? first) — \(dateText(last) ?? last)") }
+        if !places.isEmpty {
+            let total = places.reduce(0, +)
+            b.field("Рабочих мест (по указанным значениям)", total.rounded() == total ? String(format: "%.0f", total) : String(total))
+        }
+        let dates = values.compactMap { value -> (String, Date)? in
+            guard let text = value.created, let date = value.createdDate else { return nil }
+            return (text, date)
+        }.sorted { $0.1 < $1.1 }
+        if let first = dates.first, let last = dates.last {
+            b.field("Период дат создания", "\(dateText(first.0) ?? first.0) — \(dateText(last.0) ?? last.0)")
+        }
         func grouping(_ title: String, _ key: (TrudvsemVacancy) -> String) {
             b.section(title)
             let groups = Dictionary(grouping: values, by: key)
