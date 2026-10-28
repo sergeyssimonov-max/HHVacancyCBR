@@ -151,10 +151,11 @@ final class HHVacancyCBRTests: XCTestCase {
         try JSONEncoder().encode(existing).write(to: directory.appendingPathComponent("employers.legacy-v1.json"))
         try JSONEncoder().encode(existing).write(to: runtime)
         try JSONEncoder().encode(updated).write(to: bundled)
-        let before = try Data(contentsOf: runtime)
+        let legacyURL = directory.appendingPathComponent("employers.legacy-v1.json")
+        let before = try Data(contentsOf: legacyURL)
         let store = EmployerConfigurationStore(fileURL: runtime, bundledDefaultURL: bundled)
         XCTAssertEqual(try store.loadOrCreate().employers.first, existing.employers.first)
-        XCTAssertEqual(try Data(contentsOf: directory.appendingPathComponent("employers.legacy-v1.json")), before)
+        XCTAssertEqual(try Data(contentsOf: legacyURL), before)
     }
 
     func testEmployerConfigurationPreservesEveryKindOfCustomization() throws {
@@ -2014,7 +2015,8 @@ final class HHVacancyCBRTests: XCTestCase {
                                "Extracted synthetic PDF text: \(text)")
             }
             XCTAssertTrue(text.contains("DepartmentFallback"), "Lost summary department")
-            XCTAssertTrue(text.contains("02.09.2026 12:34:56"), "Lost summary publication date")
+            let expectedDate = String(VacancyPDFStyle.publicationDate(summary.publishedAt).prefix(19))
+            XCTAssertTrue(text.contains(expectedDate), "Lost summary publication date: expected \(expectedDate), got \(text)")
             XCTAssertTrue(text.contains("123 456"), "Lost summary salary")
             XCTAssertTrue(text.contains("https://hh.ru/vacancy/fallback-fields"))
             XCTAssertFalse(text.contains("Полное описание из detail endpoint HH недоступно."))
