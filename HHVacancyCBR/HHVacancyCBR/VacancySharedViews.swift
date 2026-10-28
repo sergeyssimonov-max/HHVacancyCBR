@@ -132,10 +132,12 @@ struct VacancySearchBar: View {
                 }
             }
             .padding(.horizontal, 10)
-            .frame(height: 32)
-            .padding(.leading, 9)
+            .frame(height: 28)
             .background(RoundedRectangle(cornerRadius: 7).fill(Color(nsColor: .controlBackgroundColor)))
             .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color.secondary.opacity(0.35)))
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("vacancySearchBox")
+            .padding(.leading, 9)
             Button { submit() } label: {
                 Text("Искать").frame(maxWidth: .infinity)
             }

@@ -103,6 +103,23 @@ final class HHVacancyCBRUITests: XCTestCase {
             XCTAssertEqual(search.frame.minX, refresh.frame.minX, accuracy: 1)
             XCTAssertEqual(search.frame.maxX, refresh.frame.maxX, accuracy: 1)
             XCTAssertEqual(search.frame.height, refresh.frame.height, accuracy: 1)
+            let shot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+            shot.name = "alignment-" + source; shot.lifetime = .keepAlways; add(shot)
+            let field = app.descendants(matching: .any)["vacancySearchBox"]
+            let firstSegment = app.radioButtons["hh.ru"]
+            XCTAssertTrue(field.exists)
+            XCTAssertTrue(firstSegment.exists)
+            XCTAssertEqual(field.frame.minX, firstSegment.frame.minX, accuracy: 6)
+            XCTAssertEqual(field.frame.maxX + (refresh.frame.minX - app.descendants(matching: .any)["regionFilterPicker"].frame.maxX), search.frame.minX, accuracy: 6)
+            XCTAssertEqual(field.frame.height, 29, accuracy: 1)
+            let input = app.textFields["vacancySearchField"]
+            XCTAssertTrue(input.exists)
+            input.click()
+            input.typeText("тест")
+            let clear = app.buttons["clearVacancySearch"]
+            XCTAssertTrue(clear.waitForExistence(timeout: 3))
+            clear.click()
+            XCTAssertFalse(clear.exists)
         }
     }
 
