@@ -260,7 +260,8 @@ enum VacancyPDFFormatter {
     static func attributedDocument(
         for vacancy: VacancySearchResult,
         importedDescription: NSAttributedString?,
-        context suppliedContext: DocumentContext? = nil
+        context suppliedContext: DocumentContext? = nil,
+        includeSourceEvidence: Bool = true
     ) -> NSAttributedString {
         let builder = VacancyPDFDocumentBuilder()
         let details = vacancy.details
@@ -324,7 +325,7 @@ enum VacancyPDFFormatter {
         }
 
         appendContacts(details.contacts, to: builder)
-        if isPersonalDocument { builder.sourceEvidence(context) }
+        if isPersonalDocument && includeSourceEvidence { builder.sourceEvidence(context) }
         builder.identify(context)
         return builder.document
     }
@@ -602,20 +603,22 @@ final class VacancyPDFDocumentBuilder {
 
     func sourceEvidence(_ context: DocumentContext, records: [APIObservation]? = nil) {
         let records = records ?? context.observationIDs.compactMap { try? PDFSourceEvidence.shared.observation($0) }
-        if records.count < context.observationIDs.count || records.isEmpty {
-            section("Предупреждение об исходных данных")
-            provenance("Исходный ответ для части вакансий не сохранился или повреждён. Его контрольная сумма не подтверждена. Документ содержит сохранённые сведения без подтверждения исходным ответом.")
+        let blockStart = document.length
+        section("Данные для проверки")
+        provenance("Файл содержит сохранённые ответы API и реквизиты их получения: адреса запросов, параметры, время по часам устройства, идентификаторы и контрольные суммы. Вложения содержат исходные данные JSON и, если источник их предоставил, разметку описания вакансии. Они не являются снимком внешнего вида страницы сайта.")
+        provenance("Материалы могут быть исследованы при судебной компьютерно-технической экспертизе с применением соответствующих методик, в том числе разработок ФБУ РФЦСЭ при Минюсте России. Суд может истребовать сведения у оператора площадки (статьи 57 и 79 ГПК РФ, статьи 66 и 82 АПК РФ). Происхождение и время размещения оцениваются с учётом всех доказательств.")
+        let covered = Set(records.flatMap(\.vacancyIDs))
+        if records.count < context.observationIDs.count || !Set(context.vacancyIDs).isSubset(of: covered) {
+            provenance("Исходный ответ для части вакансий не сохранился или повреждён. Его контрольная сумма не подтверждена.")
         }
         guard !records.isEmpty else { return }
-        let blockStart = document.length
-        section("Проверка исходных данных")
-        field("Хеш-функция", MaterialHash.displayName)
-        provenance("Хеш рассчитан по байтам ответа, приложенного к PDF. Совпадение хеша подтверждает только согласованность байтов и контрольной суммы; оно не доказывает происхождение ответа и время его получения.")
+        provenance("Совпадение контрольной суммы подтверждает согласованность вложенных байтов и хеша, но само по себе не подтверждает их происхождение или время получения.")
         for (index, record) in records.enumerated() {
             field("Ответ API №\(index + 1)", record.endpoint + " · сохранён " + VacancyPDFStyle.utcDate(record.receivedAt))
             field("Запрос", record.method + " · " + record.parameters.keys.sorted().map { "\($0)=\(record.parameters[$0]!)" }.joined(separator: "&"))
             field("Отправлен", VacancyPDFStyle.utcDate(record.sentAt))
             field("HTTP / байт", "\(record.httpStatus) / \(record.byteCount)")
+            field("Алгоритм хеша", record.algorithm == MaterialHash.algorithm ? MaterialHash.displayName : record.algorithm)
             hashField("Хеш ответа №\(index + 1)", record.hash)
         }
         if records.count <= 3 {
@@ -1078,10 +1081,11 @@ struct PDFVacancySnapshot: @unchecked Sendable {
     let attributedDocument: NSAttributedString
 
     @MainActor
-    init(value: VacancySearchResult) {
+    init(value: VacancySearchResult, includeSourceEvidence: Bool = true) {
         context = DocumentContext.vacancy(value)
         attributedDocument = VacancyPDFFormatter.attributedDocument(for: value,
-            importedDescription: VacancyPDFFormatter.importedDescription(for: value), context: context)
+            importedDescription: VacancyPDFFormatter.importedDescription(for: value), context: context,
+            includeSourceEvidence: includeSourceEvidence)
     }
     init(context: DocumentContext, document: NSAttributedString) {
         self.context = context; attributedDocument = document.copy() as! NSAttributedString
@@ -1095,7 +1099,7 @@ struct PDFVacanciesSnapshot: @unchecked Sendable {
     init(values: [VacancySearchResult]) {
         var snapshots: [PDFVacancySnapshot] = []
         snapshots.reserveCapacity(values.count)
-        for value in values { snapshots.append(PDFVacancySnapshot(value: value)) }
+        for value in values { snapshots.append(PDFVacancySnapshot(value: value, includeSourceEvidence: false)) }
         self.values = snapshots
     }
 
@@ -1110,7 +1114,7 @@ struct PDFVacanciesSnapshot: @unchecked Sendable {
         snapshots.reserveCapacity(values.count)
         for value in values {
             try Task.checkCancellation()
-            snapshots.append(PDFVacancySnapshot(value: value))
+            snapshots.append(PDFVacancySnapshot(value: value, includeSourceEvidence: false))
             await Task.yield()
         }
         return PDFVacanciesSnapshot(snapshots: snapshots)
@@ -1277,7 +1281,7 @@ actor PDFExportWorker {
         for vacancy in vacancies {
             try Task.checkCancellation()
             snapshots.append(autoreleasepool {
-                TrudvsemPDFFormatter.personal(vacancy, records: vacancy.context.observationIDs.compactMap { observations[$0] })
+                TrudvsemPDFFormatter.personal(vacancy, records: vacancy.context.observationIDs.compactMap { observations[$0] }, includeSourceEvidence: false)
             })
         }
         return try await prepare(vacancies: PDFVacanciesSnapshot(snapshots: snapshots), filters: filters, progress: progress)
@@ -1340,6 +1344,11 @@ actor PDFExportWorker {
             builder.field("Сформирован", VacancyPDFStyle.utcDate(started))
             builder.field("Часть", "\(part) из \(total)")
             if continuation { builder.field("Продолжение", "Полная карточка вакансии продолжается с предыдущей части") }
+            builder.identify(c)
+            return autoreleasepool { VacanciesPDFExporter.pages(for: builder.document) }
+        }
+        func evidencePages(_ c: DocumentContext) -> [VacanciesPDFExporter.Page] {
+            let builder = VacancyPDFDocumentBuilder()
             builder.sourceEvidence(c, records: c.observationIDs.compactMap { observations[$0] })
             builder.identify(c)
             return autoreleasepool { VacanciesPDFExporter.pages(for: builder.document) }
@@ -1347,7 +1356,7 @@ actor PDFExportWorker {
         func headerPageCount(_ c: DocumentContext) -> Int {
             let key = HeaderKey(source: c.source.rawValue, vacancyCount: c.vacancyIDs.count, observationIDs: c.observationIDs)
             if let count = headerPageCounts[key] { return count }
-            let count = header(c, part: 999999, total: 999999, continuation: true).count
+            let count = header(c, part: 999999, total: 999999, continuation: true).count + evidencePages(c).count
             headerPageCounts[key] = count
             return count
         }
@@ -1384,7 +1393,11 @@ actor PDFExportWorker {
                                  stage: "Формирование части \(index + 1) из \(chunks.count)"))
             let c = context(chunk.contexts)
             let continuation = !previousIDs.isDisjoint(with: c.vacancyIDs)
-            let pages = header(c, part: index + 1, total: chunks.count, continuation: continuation) + chunk.pages
+            let headerPages = header(c, part: index + 1, total: chunks.count, continuation: continuation)
+            let combined = NSMutableAttributedString(attributedString: headerPages.last!.content)
+            combined.append(chunk.pages[0].content)
+            let leadingPages = autoreleasepool { VacanciesPDFExporter.pages(for: combined) }
+            let pages = Array(headerPages.dropLast()) + leadingPages + Array(chunk.pages.dropFirst()) + evidencePages(c)
             guard pages.count <= limit else { throw PDFSourceError.invalid("Превышен лимит страниц") }
             let rendered = try autoreleasepool {
                 try documentedData(pages: pages, context: c, pageOffset: pageOffset)

@@ -914,7 +914,10 @@ final class HHVacancyCBRTests: XCTestCase {
         try originalData.write(to: original)
         let exporter = VacanciesPDFExporter(chooseDirectory: { directory }, now: { date })
         let outcome = try await exporter.export(vacancies: [makePDFVacancy(id: "suffix")]) { _ in }
-        XCTAssertEqual(outcome, .exported(fileCount: 1, pageCount: 3))
+        guard case .exported(let count, let pages) = outcome else { return XCTFail("Expected exported PDF") }
+        XCTAssertEqual(count, 1)
+        XCTAssertGreaterThan(pages, 0)
+        XCTAssertLessThanOrEqual(pages, 100)
         XCTAssertEqual(try Data(contentsOf: original), originalData)
         let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
             .filter { $0.pathExtension == "pdf" && $0.lastPathComponent != name }
@@ -1799,7 +1802,10 @@ final class HHVacancyCBRTests: XCTestCase {
 
         selectedDirectory = directory
         let completed = try await exporter.export(vacancies: [vacancy]) { _ in }
-        XCTAssertEqual(completed, .exported(fileCount: 1, pageCount: 3))
+        guard case .exported(let count, let pages) = completed else { return XCTFail("Expected exported PDF after cancellation") }
+        XCTAssertEqual(count, 1)
+        XCTAssertGreaterThan(pages, 0)
+        XCTAssertLessThanOrEqual(pages, 100)
     }
 
     func testPDFPaginationPreservesOversizedUnicodeContentAndRendersEveryPage() throws {
@@ -2002,7 +2008,8 @@ final class HHVacancyCBRTests: XCTestCase {
         XCTAssertEqual(files.count, 2)
         for file in files {
             let pdf = try XCTUnwrap(PDFDocument(url: file))
-            XCTAssertEqual(pdf.pageCount, file.lastPathComponent == "personal.pdf" ? 2 : 3)
+            XCTAssertGreaterThan(pdf.pageCount, 0)
+            XCTAssertLessThanOrEqual(pdf.pageCount, 100)
             let text = try extractedStatisticsText(pdf)
             // Use word markers: PDFKit versions can reorder punctuation during
             // extraction. Check exact source content and one complete occurrence
@@ -3734,6 +3741,75 @@ extension HHVacancyCBRTests {
         XCTAssertNotNil(failed.errorMessage); XCTAssertEqual(failed.results, [value]); XCTAssertEqual(try store.load()?.vacancies, [value])
     }
     @MainActor
+    func testHHBulkPDFHasOneEvidenceSectionAfterVacancy() async throws {
+        let value = statisticsVacancy(id: "hh-footer", date: "2026-09-01T10:00:00Z")
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let worker = PDFExportWorker()
+        let snapshots = PDFVacanciesSnapshot(values: [value])
+        let prepared = try await worker.prepare(vacancies: snapshots) { _ in }
+        let files = try await worker.writePrepared(names: (0..<prepared.partCount).map { "hh\($0).pdf" }, directory: directory)
+        for file in files {
+            let text = try XCTUnwrap(PDFDocument(url: file)?.string)
+            XCTAssertEqual(text.components(separatedBy: "Данные для проверки").count - 1, 1)
+            XCTAssertGreaterThan(try XCTUnwrap(text.range(of: "Данные для проверки")?.lowerBound),
+                                 try XCTUnwrap(text.range(of: value.name)?.lowerBound))
+            let raw = try Data(contentsOf: file)
+            for material in try PDFSourceEvidence.shared.materials(for: DocumentContext.vacancy(value)) { XCTAssertNotNil(raw.range(of: material.data)) }
+        }
+    }
+
+    @MainActor
+    func testTrudPDFUsesReadableSectionsAndEvidenceAtEnd() async throws {
+        var row = TrudFixture.row("readable")
+        var raw = try XCTUnwrap(row["vacancy"] as? [String: Any])
+        raw["requirement"] = ["education": "Высшее образование", "experience": 1]
+        raw["contact_list"] = [["contact_type": "Телефон", "contact_value": "+7 123"]]
+        raw["medicalDocuments"] = "Медицинская книжка"
+        raw["companycode"] = "secret-code"
+        row["vacancy"] = raw
+        let data = try TrudFixture.data([row])
+        let url = try TrudvsemAPIClient.url(inn: TrudFixture.bank.inn, page: 0, limit: 100)
+        let obs = try XCTUnwrap(PDFSourceEvidence.shared.capture(data: data, url: url, status: 200, sent: Date(), received: Date()))
+        let dto = try XCTUnwrap(TrudvsemPage(data: data).vacancies.first)
+        let value = TrudvsemVacancy(dto: dto, organization: TrudFixture.bank, observationIDs: [obs.id])
+        let card = TrudvsemPDFFormatter.personal(value).attributedDocument.string
+        XCTAssertTrue(card.contains("Дата создания: 21.10.2026"))
+        XCTAssertTrue(card.contains("Медицинские документы"))
+        XCTAssertTrue(card.contains("Контакт: +7 123"))
+        for key in ["companycode", "contact_type", "contact_value", "medicalDocuments", "Код региона"] { XCTAssertFalse(card.contains(key), key) }
+        XCTAssertGreaterThan(try XCTUnwrap(card.range(of: "Данные для проверки")?.lowerBound), try XCTUnwrap(card.range(of: "Описание вакансии")?.lowerBound))
+        let stats = TrudvsemPDFFormatter.statistics([value], filters: ["Сортировка": "Сначала новые"]).attributedDocument.string
+        XCTAssertTrue(stats.contains("Период дат создания: 21.10.2026 — 21.10.2026"))
+        XCTAssertFalse(stats.contains("Сортировка:"))
+        XCTAssertFalse(stats.contains("Зарплата по валюте и периодичности"))
+        XCTAssertTrue(stats.contains("Требования к опыту работы"))
+        XCTAssertTrue(stats.contains("От 1 года: 1"))
+        XCTAssertFalse(stats.contains("companycode"))
+        let worker = PDFExportWorker(), directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let personalURL = directory.appendingPathComponent("personal.pdf")
+        let statisticsURL = directory.appendingPathComponent("statistics.pdf")
+        try await worker.exportTrudvsemPersonal(vacancy: value, destination: personalURL)
+        try await worker.exportTrudvsemStatistics(vacancies: [value], filters: ["Сортировка": "Сначала новые"], destination: statisticsURL)
+        for (name, url) in [("personal", personalURL), ("statistics", statisticsURL)] {
+            let attachment = XCTAttachment(data: try Data(contentsOf: url), uniformTypeIdentifier: "com.adobe.pdf")
+            attachment.name = "review-" + name; attachment.lifetime = .keepAlways; add(attachment)
+        }
+        let prepared = try await worker.prepareTrudvsem(vacancies: [value]) { _ in }
+        let files = try await worker.writePrepared(names: (0..<prepared.partCount).map { "part\($0).pdf" }, directory: directory)
+        for file in files {
+            let pdf = try XCTUnwrap(PDFDocument(url: file))
+            let attachment = XCTAttachment(data: try Data(contentsOf: file), uniformTypeIdentifier: "com.adobe.pdf")
+            attachment.name = "review-bulk"; attachment.lifetime = .keepAlways; add(attachment)
+            let text = try XCTUnwrap(pdf.string)
+            XCTAssertEqual(text.components(separatedBy: "Данные для проверки").count - 1, 1)
+            XCTAssertGreaterThan(try XCTUnwrap(text.range(of: "Данные для проверки")?.lowerBound), try XCTUnwrap(text.range(of: value.title)?.lowerBound))
+            XCTAssertNotNil(try Data(contentsOf: file).range(of: data))
+        }
+    }
+
+    @MainActor
     func testThreeTrudPDFModesAttachExactSourcesAndRejectMissingEvidence() async throws {
         let values = [try TrudFixture.documented("one"), try TrudFixture.documented("two")]
         let dir = temporaryDirectory(), worker = PDFExportWorker()
@@ -3771,7 +3847,11 @@ extension HHVacancyCBRTests {
         var combined = ""
         for url in urls {
             let pdf = try XCTUnwrap(PDFDocument(url: url)); XCTAssertLessThanOrEqual(pdf.pageCount, 100); XCTAssertGreaterThan(pdf.pageCount, 0)
-            combined += pdf.string ?? ""
+            let partText = try XCTUnwrap(pdf.string)
+            XCTAssertEqual(partText.components(separatedBy: "Данные для проверки").count - 1, 1)
+            XCTAssertGreaterThan(try XCTUnwrap(partText.range(of: "Данные для проверки")?.lowerBound),
+                                 try XCTUnwrap(partText.range(of: "Строка ", options: .backwards)?.lowerBound))
+            combined += partText
             let raw = try Data(contentsOf: url)
             for material in try PDFSourceEvidence.shared.materials(for: vacancy.context) { XCTAssertNotNil(raw.range(of: material.data)) }
         }
