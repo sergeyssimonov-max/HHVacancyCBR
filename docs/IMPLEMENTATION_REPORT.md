@@ -75,3 +75,5 @@ employers.json мигрирует v1 → v2 атомарным объедине�
 
 - `HHVacancyCBR/HHVacancyCBR/FavoriteVacanciesPDFExporter.swift`
 - `HHVacancyCBR/HHVacancyCBR/FavoriteVacancyStore.swift`
+
+Оформление карточек: поисковая панель повторяет геометрию верхней панели; кнопки «Обновить» и «Искать» имеют совпадающие края и ширину. Обозначение валюты зарплаты всегда выводится без кавычек, даже если источник передал кавычки.

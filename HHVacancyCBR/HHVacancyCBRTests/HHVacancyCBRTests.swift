@@ -3564,6 +3564,20 @@ extension HHVacancyCBRTests {
         XCTAssertEqual(value.salary, "60 000 руб.")
     }
 
+    func testTrudSalaryRemovesCurrencyQuotationMarks() throws {
+        for currency in ["«руб.»", "\"руб.\"", "'RUR'", "„руб.“"] {
+            var row = TrudFixture.row("currency")
+            var vacancy = try XCTUnwrap(row["vacancy"] as? [String: Any])
+            vacancy["salary_min"] = 50000
+            vacancy["salary_max"] = 65000
+            vacancy["currency"] = currency
+            row["vacancy"] = vacancy
+            let dto = try XCTUnwrap(TrudFixture.page([row]).vacancies.first)
+            let value = TrudvsemVacancy(dto: dto, organization: TrudFixture.bank, observationIDs: [])
+            XCTAssertEqual(value.salary, "50 000-65 000 руб.")
+        }
+    }
+
     func testTrudSalaryBoundsMatchHHFormat() throws {
         var row = TrudFixture.row("salary")
         var vacancy = try XCTUnwrap(row["vacancy"] as? [String: Any])

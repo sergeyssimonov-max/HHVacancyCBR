@@ -92,6 +92,20 @@ final class HHVacancyCBRUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Загрузите вакансии trudvsem.ru кнопкой «Обновить»."].exists)
     }
 
+    func testSearchButtonAlignsWithRefreshOnBothSources() {
+        let app = launch()
+        for (source, refreshID) in [("hh.ru", "searchVacanciesButton"), ("trudvsem.ru", "refreshTrudvsemButton")] {
+            if source == "trudvsem.ru" { app.radioButtons[source].click() }
+            let refresh = app.buttons[refreshID]
+            let search = app.buttons["submitVacancySearch"]
+            XCTAssertTrue(refresh.waitForExistence(timeout: 5))
+            XCTAssertTrue(search.exists)
+            XCTAssertEqual(search.frame.minX, refresh.frame.minX, accuracy: 1)
+            XCTAssertEqual(search.frame.maxX, refresh.frame.maxX, accuracy: 1)
+            XCTAssertEqual(search.frame.height, refresh.frame.height, accuracy: 1)
+        }
+    }
+
     func testToolbarUsesOneAlignedRowWithoutExternalFilterLabels() {
         let app = launch()
         let mode = app.descendants(matching: .any)["vacancyListModePicker"]

@@ -648,13 +648,13 @@ struct HHSalary: Codable, Equatable {
     }
 
     private var currencyDisplayName: String {
-        switch currency {
-        case "RUR", "RUB":
-            return "руб."
-        case let value?:
-            return value
-        case nil:
-            return ""
+        let value = currency?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\"'«»„“”"))
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        switch value.uppercased() {
+        case "RUR", "RUB", "РУБ.", "РУБ": return "руб."
+        default: return value
         }
     }
 

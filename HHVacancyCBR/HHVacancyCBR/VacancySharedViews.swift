@@ -133,9 +133,12 @@ struct VacancySearchBar: View {
             }
             .padding(.horizontal, 10)
             .frame(height: 32)
+            .padding(.leading, 9)
             .background(RoundedRectangle(cornerRadius: 7).fill(Color(nsColor: .controlBackgroundColor)))
             .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color.secondary.opacity(0.35)))
-            Button("Искать") { submit() }
+            Button { submit() } label: {
+                Text("Искать").frame(maxWidth: .infinity)
+            }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .frame(width: 120, height: 32)
