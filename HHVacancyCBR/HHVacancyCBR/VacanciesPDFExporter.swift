@@ -603,17 +603,15 @@ final class VacancyPDFDocumentBuilder {
 
     func sourceEvidence(_ context: DocumentContext, records: [APIObservation]? = nil) {
         let records = records ?? context.observationIDs.compactMap { try? PDFSourceEvidence.shared.observation($0) }
-        let blockStart = document.length
         section("Данные для проверки")
         provenance("При наличии сохранённых ответов API файл включает их исходные данные и реквизиты получения: адреса запросов, параметры, время по часам устройства, идентификаторы и контрольные суммы. Вложения содержат JSON и, если источник предоставил, разметку описания вакансии. Они не являются снимком внешнего вида страницы сайта.")
-        provenance("Документы, полученные через интернет, могут представляться как письменные доказательства при соблюдении применимых условий: статья 71 Гражданского процессуального кодекса Российской Федерации и статья 75 Арбитражного процессуального кодекса Российской Федерации. Относимость, допустимость и достоверность оценивает суд.")
-        provenance("Материалы могут быть исследованы при судебной компьютерно-технической экспертизе с применением соответствующих экспертных методик. При необходимости суд может истребовать сведения у оператора площадки (статьи 57 и 79 Гражданского процессуального кодекса Российской Федерации; статьи 66 и 82 Арбитражного процессуального кодекса Российской Федерации). Для фиксации содержимого сайта возможно обеспечение доказательств нотариусом (статьи 102 и 103 Основ законодательства Российской Федерации о нотариате); данный файл не является нотариальным протоколом.")
+        provenance("Документы, полученные через интернет, могут представляться как письменные доказательства при соблюдении применимых условий: статья 71 Гражданского процессуального кодекса Российской Федерации. Относимость, допустимость и достоверность оценивает суд.")
+        provenance("Материалы могут быть исследованы при судебной компьютерно-технической экспертизе с применением соответствующих экспертных методик. При необходимости суд может истребовать сведения у оператора площадки (статьи 57 и 79 Гражданского процессуального кодекса Российской Федерации).")
         let covered = Set(records.flatMap(\.vacancyIDs))
         if records.count < context.observationIDs.count || !Set(context.vacancyIDs).isSubset(of: covered) {
             provenance("Исходный ответ для части вакансий не сохранился или повреждён. Его контрольная сумма не подтверждена.")
         }
         guard !records.isEmpty else { return }
-        provenance("Совпадение контрольной суммы подтверждает согласованность вложенных байтов и хеша, но само по себе не подтверждает их происхождение или время получения.")
         for (index, record) in records.enumerated() {
             field("Ответ API №\(index + 1)", record.endpoint + " · сохранён " + VacancyPDFStyle.utcDate(record.receivedAt))
             field("Запрос", record.method + " · " + record.parameters.keys.sorted().map { "\($0)=\(record.parameters[$0]!)" }.joined(separator: "&"))
@@ -621,15 +619,6 @@ final class VacancyPDFDocumentBuilder {
             field("HTTP / байт", "\(record.httpStatus) / \(record.byteCount)")
             field("Алгоритм хеша", record.algorithm == MaterialHash.algorithm ? MaterialHash.displayName : record.algorithm)
             hashField("Хеш ответа №\(index + 1)", record.hash)
-        }
-        if records.count <= 3 {
-            let text = document.string as NSString
-            let lastParagraph = text.paragraphRange(for: NSRange(location: document.length - 1, length: 0))
-            let groupLength = lastParagraph.location - blockStart
-            if groupLength > 0 {
-                document.addAttribute(VacancyPDFStyle.keepWithNext, value: true,
-                                      range: NSRange(location: blockStart, length: groupLength))
-            }
         }
     }
 

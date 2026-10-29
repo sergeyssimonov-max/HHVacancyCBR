@@ -3788,6 +3788,9 @@ extension HHVacancyCBRTests {
         for file in files {
             let text = try XCTUnwrap(PDFDocument(url: file)?.string)
             XCTAssertEqual(text.components(separatedBy: "Данные для проверки").count - 1, 1)
+            XCTAssertFalse(text.contains("Арбитражного процессуального кодекса"))
+            XCTAssertFalse(text.contains("нотариус"))
+            XCTAssertFalse(text.contains("Совпадение контрольной суммы подтверждает согласованность"))
             XCTAssertFalse(text.contains("Сведения о вакансии"))
             XCTAssertEqual(text.components(separatedBy: "Все вакансии").count - 1, 1)
             XCTAssertGreaterThan(try XCTUnwrap(text.range(of: "Данные для проверки")?.lowerBound),
@@ -3795,6 +3798,27 @@ extension HHVacancyCBRTests {
             let raw = try Data(contentsOf: file)
             for material in try PDFSourceEvidence.shared.materials(for: DocumentContext.vacancy(value)) { XCTAssertNotNil(raw.range(of: material.data)) }
         }
+    }
+
+    @MainActor
+    func testTrudStatisticsEvidenceFlowsWithoutIsolatedParagraphPage() throws {
+        let rows = (0..<35).map { TrudFixture.row("flow-\($0)") }
+        let data = try TrudFixture.data(rows)
+        let url = try TrudvsemAPIClient.url(inn: TrudFixture.bank.inn, page: 0, limit: 100)
+        let observation = try XCTUnwrap(PDFSourceEvidence.shared.capture(data: data, url: url, status: 200, sent: Date(), received: Date()))
+        let values = try TrudvsemPage(data: data).vacancies.map {
+            TrudvsemVacancy(dto: $0, organization: TrudFixture.bank, observationIDs: [observation.id])
+        }
+        let document = TrudvsemPDFFormatter.statistics(values, filters: [:])
+        let pages = VacanciesPDFExporter.pages(for: document.attributedDocument)
+        let legalIndex = try XCTUnwrap(pages.firstIndex { $0.content.string.contains("Документы, полученные через интернет") })
+        let pageText = pages[legalIndex].content.string.trimmingCharacters(in: .whitespacesAndNewlines)
+        if pageText.hasPrefix("Документы, полученные через интернет") {
+            XCTAssertTrue(pageText.contains("Материалы могут быть исследованы"), "На странице не должен оставаться один короткий абзац")
+        }
+        let rendered = try VacanciesPDFExporter.pdfData(for: pages)
+        let attachment = XCTAttachment(data: rendered, uniformTypeIdentifier: "com.adobe.pdf")
+        attachment.name = "trud-statistics-evidence-flow"; attachment.lifetime = .keepAlways; add(attachment)
     }
 
     @MainActor
@@ -3813,8 +3837,10 @@ extension HHVacancyCBRTests {
         let value = TrudvsemVacancy(dto: dto, organization: TrudFixture.bank, observationIDs: [obs.id])
         let card = TrudvsemPDFFormatter.personal(value).attributedDocument.string
         XCTAssertTrue(card.contains("статья 71 Гражданского процессуального кодекса Российской Федерации"))
-        XCTAssertTrue(card.contains("статья 75 Арбитражного процессуального кодекса Российской Федерации"))
-        XCTAssertTrue(card.contains("данный файл не является нотариальным протоколом"))
+        let evidence = String(card[try XCTUnwrap(card.range(of: "Данные для проверки")).lowerBound...])
+        XCTAssertFalse(evidence.contains("Арбитражного процессуального кодекса"))
+        XCTAssertFalse(evidence.contains("нотариус"))
+        XCTAssertFalse(evidence.contains("Совпадение контрольной суммы подтверждает согласованность"))
         XCTAssertTrue(card.contains("Дата создания: 21.10.2026"))
         XCTAssertTrue(card.contains("Медицинские документы"))
         XCTAssertTrue(card.contains("Контакт: +7 123"))
@@ -3827,6 +3853,19 @@ extension HHVacancyCBRTests {
         XCTAssertTrue(stats.contains("Требования к опыту работы"))
         XCTAssertTrue(stats.contains("От 1 года: 1"))
         XCTAssertFalse(stats.contains("companycode"))
+        let statsEvidence = String(stats[try XCTUnwrap(stats.range(of: "Данные для проверки")).lowerBound...])
+        XCTAssertFalse(statsEvidence.contains("Арбитражного процессуального кодекса"))
+        XCTAssertFalse(statsEvidence.contains("нотариус"))
+        XCTAssertFalse(statsEvidence.contains("Совпадение контрольной суммы подтверждает согласованность"))
+        let attributed = TrudvsemPDFFormatter.statistics([value], filters: [:]).attributedDocument
+        let nsText = attributed.string as NSString
+        for paragraph in ["Документы, полученные через интернет", "Материалы могут быть исследованы", "Ответ API №1"] {
+            let range = nsText.range(of: paragraph)
+            XCTAssertNotEqual(range.location, NSNotFound)
+            if range.location != NSNotFound {
+                XCTAssertNil(attributed.attribute(VacancyPDFStyle.keepWithNext, at: range.location, effectiveRange: nil), paragraph)
+            }
+        }
         let worker = PDFExportWorker(), directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let personalURL = directory.appendingPathComponent("personal.pdf")
