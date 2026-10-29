@@ -6,7 +6,7 @@ struct VacancyCollectionProgress: Equatable, Sendable {
     let partition: String
 }
 
-/// An employer whose vacancies were not read completely: the count differs from
+/// An employer whose vacancies were not read completely: the count falls short of
 /// hh.ru `found`, or some partitions failed after the client's own retries.
 struct VacancyCollectionIssue: Codable, Equatable, Sendable {
     let employerID: String
@@ -147,7 +147,7 @@ struct VacancyCollectionService: Sendable {
             )
             for item in outcome.values.values { all[item.id] = item }
             firstError = firstError ?? outcome.firstError
-            if outcome.values.count != initialResponse.found || !outcome.failures.isEmpty {
+            if outcome.values.count < initialResponse.found || !outcome.failures.isEmpty {
                 issues.append(.init(employerID: employer.id, employerName: employer.name, expected: initialResponse.found,
                                     actual: outcome.values.count, failures: outcome.failures))
             }

@@ -368,6 +368,14 @@ final class HHVacancyCBRTests: XCTestCase {
         XCTAssertEqual(Set(values.vacancies.map(\.id)).count, 2_001)
     }
 
+    func testCollectorAcceptsMoreVacanciesThanInitiallyFound() async throws {
+        let result = try await VacancyCollectionService(client: MockAPIClient(mode: .surplus)).collect(
+            employers: [.init(id: "47858", name: "Банк России", comment: "test")],
+            areas: try AreaDirectoryIndex(root: Self.areaTree), progress: { _ in })
+        XCTAssertTrue(result.isComplete)
+        XCTAssertEqual(result.vacancies.count, 151)
+    }
+
     func testCollectorRereadsShortLeafOnceThenKeepsPartialResultWithIssue() async throws {
         let client = MockAPIClient(mode: .mismatch)
         let result = try await VacancyCollectionService(client: client).collect(
@@ -2974,7 +2982,7 @@ private actor EmployerScriptedClient: HHVacancyAPIClient {
 
 private actor MockAPIClient: HHVacancyAPIClient {
     enum Mode: Sendable {
-        case simple, partitioned, mismatch, failure, delayedArchive, archiveNotFound
+        case simple, partitioned, mismatch, surplus, failure, delayedArchive, archiveNotFound
         case archiveRecoverableFailure, archiveTerminalFailure, archiveCancelled, delayedRefreshFailure, filters
     }
     let mode: Mode
@@ -3077,6 +3085,11 @@ private actor MockAPIClient: HHVacancyAPIClient {
             let item = makeSummary(id: "\(request.employerID)-vacancy", employerID: request.employerID,
                                    employerName: remote ? "НСПК" : "Банк России", remote: remote)
             return page([item], found: 1, request: request)
+        case .surplus:
+            let start = request.page == 0 ? 1 : 101
+            let end = request.page == 0 ? 100 : 151
+            let values = (start...end).map { makeSummary(id: "surplus-\($0)", employerID: request.employerID, employerName: "Банк России") }
+            return .init(items: values, found: request.page == 0 ? 150 : 151, pages: 2, page: request.page, perPage: request.perPage)
         case .mismatch:
             return page([makeSummary(id: "only-one", employerID: request.employerID, employerName: "Банк России")], found: 2, request: request)
         case .partitioned:
