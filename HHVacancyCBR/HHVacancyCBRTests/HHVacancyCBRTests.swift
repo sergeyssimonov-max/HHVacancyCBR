@@ -1869,6 +1869,48 @@ final class HHVacancyCBRTests: XCTestCase {
         try VacanciesPDFExporter.validatePDF(data: data, expectedPages: pages.count)
     }
 
+    func testPDFListContinuationRetainsIndentAndLinkAcrossPages() throws {
+        let style = NSMutableParagraphStyle()
+        style.firstLineHeadIndent = 4
+        style.headIndent = 18
+        let url = URL(string: "https://example.com/list")!
+        let source = (0..<120).map { String(format: "line%03d", $0) }.joined(separator: "\u{2028}")
+        let text = NSAttributedString(string: source, attributes: [
+            .font: NSFont.systemFont(ofSize: 12), .paragraphStyle: style, .link: url
+        ])
+        let pages = VacanciesPDFExporter.pages(for: text)
+        XCTAssertGreaterThan(pages.count, 1)
+        let pdf = try XCTUnwrap(PDFDocument(data: VacanciesPDFExporter.pdfData(for: pages)))
+        for index in 1..<pages.count {
+            let firstLine = try XCTUnwrap(pages[index].content.string.components(separatedBy: "\u{2028}").first)
+            let page = try XCTUnwrap(pdf.page(at: index))
+            let pageString = try XCTUnwrap(page.string) as NSString
+            let range = pageString.range(of: firstLine)
+            XCTAssertNotEqual(range.location, NSNotFound)
+            let selection = try XCTUnwrap(page.selection(for: range))
+            XCTAssertEqual(selection.bounds(for: page).minX, VacancyPDFDefaults.horizontalMargin + 18, accuracy: 2)
+            XCTAssertTrue(page.annotations.contains { $0.url == url })
+        }
+    }
+
+    @MainActor
+    func testPDFHTMLListAndLongBreakParagraphUseRemainingSpace() throws {
+        let prefix = String(repeating: "Вступление<br>", count: 20)
+        let long = (0..<35).map { "СтрокаHTML\($0)" }.joined(separator: "<br>")
+        let html = "<p>\(prefix)</p><ul><li>\(long)</li></ul>"
+        let text = VacancyHTMLAttributedText.convert(html)
+        let pages = VacanciesPDFExporter.pages(for: text)
+        XCTAssertGreaterThan(pages.count, 1)
+        XCTAssertTrue(pages[0].content.string.contains("СтрокаHTML0"))
+        XCTAssertTrue(pages[1].content.string.contains("СтрокаHTML"))
+        XCTAssertEqual(pages.map(\.content.string).joined(), text.string)
+        let data = try VacanciesPDFExporter.pdfData(for: pages)
+        let pdf = try XCTUnwrap(PDFDocument(data: data))
+        XCTAssertEqual(pdf.pageCount, pages.count)
+        XCTAssertTrue(try XCTUnwrap(pdf.string).contains("СтрокаHTML0"))
+        XCTAssertTrue(try XCTUnwrap(pdf.string).contains("СтрокаHTML34"))
+    }
+
     func testPDFPaginationDoesNotEmitBlankPagesForWhitespaceTail() throws {
         let source = "Текст вакансии\n" + String(repeating: "\n", count: 400)
         let attributed = NSAttributedString(
