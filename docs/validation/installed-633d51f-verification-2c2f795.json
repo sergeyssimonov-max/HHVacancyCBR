@@ -1,0 +1,13 @@
+{
+  "verifiedCommit": "2c2f79587c4187ce46d24c2a7a681d703129b1e5",
+  "buildCommit": "633d51f34adf4ec5da8053d1e62925bc6329d758",
+  "changedFiles": [
+    "docs/INSTALLATION_CHECK_2026-11-14.md"
+  ],
+  "installedMatchesDMG": true,
+  "bundleFilesCompared": 7,
+  "signatureValid": true,
+  "dropboxContentHashVerified": "fa53c63791511a7640b30ec1fabfc4fd7d0f44256edbf5d3e4f1c4459bf0e721",
+  "dmgSHA256": "3d7b3c03ebeb33b8bf8f85240d672f6e547430f9ea4a50eea02a7ec8ccb7aa22",
+  "rebuildRequired": false
+}

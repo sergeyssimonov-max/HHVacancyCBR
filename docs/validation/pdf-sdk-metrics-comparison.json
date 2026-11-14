@@ -1,0 +1,205 @@
+{
+  "test": "HHVacancyCBRTests/testOptInPDFRenderingMetrics",
+  "iterationsPerBuild": 5,
+  "beforeBundle": "BeforePDFMetrics.xcresult",
+  "afterBundle": "AfterPDFMetrics.xcresult",
+  "beforeStatus": "Success",
+  "afterStatus": "Success",
+  "skipped": false,
+  "execution": "Sequential test-without-building; original compiled Before/After Debug hosts; no UI automation, live flags or fixture clock.",
+  "caveat": "No stored XCTest baselineAverage is present. This report compares observed samples explicitly. Memory Physical is a signed net delta near zero; its RSD/ratio is not a reliable measure of regression. Peak physical memory is reported separately.",
+  "metrics": [
+    {
+      "identifier": "com.apple.dt.XCTMetric_Memory.physical",
+      "name": "Memory Physical",
+      "unit": "kB",
+      "before": {
+        "name": "Memory Physical",
+        "unit": "kB",
+        "values": [
+          196.608,
+          -180.224,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "mean": 3.276800000000003,
+        "populationRelativeStandardDeviationPercent": 3638.6810797320472
+      },
+      "after": {
+        "name": "Memory Physical",
+        "unit": "kB",
+        "values": [
+          49.152,
+          -49.152,
+          0.0,
+          -16.384,
+          16.384
+        ],
+        "mean": 0.0,
+        "populationRelativeStandardDeviationPercent": null
+      },
+      "meanChangePercent": null
+    },
+    {
+      "identifier": "com.apple.dt.XCTMetric_CPU.cycles",
+      "name": "CPU Cycles",
+      "unit": "kC",
+      "before": {
+        "name": "CPU Cycles",
+        "unit": "kC",
+        "values": [
+          650311.936,
+          648130.099,
+          644663.76,
+          644424.808,
+          643773.943
+        ],
+        "mean": 646260.9092,
+        "populationRelativeStandardDeviationPercent": 0.39152765901261344
+      },
+      "after": {
+        "name": "CPU Cycles",
+        "unit": "kC",
+        "values": [
+          642831.407,
+          641792.301,
+          641124.574,
+          642502.233,
+          642007.229
+        ],
+        "mean": 642051.5488,
+        "populationRelativeStandardDeviationPercent": 0.0918731586894381
+      },
+      "meanChangePercent": -0.6513407108609925
+    },
+    {
+      "identifier": "com.apple.dt.XCTMetric_Clock.time.monotonic",
+      "name": "Clock Monotonic Time",
+      "unit": "s",
+      "before": {
+        "name": "Clock Monotonic Time",
+        "unit": "s",
+        "values": [
+          0.201753374,
+          0.19756957,
+          0.19796850000000002,
+          0.196534443,
+          0.19600837200000001
+        ],
+        "mean": 0.1979668518,
+        "populationRelativeStandardDeviationPercent": 1.019898209137694
+      },
+      "after": {
+        "name": "Clock Monotonic Time",
+        "unit": "s",
+        "values": [
+          0.19569902700000003,
+          0.195434864,
+          0.195209077,
+          0.19558623600000002,
+          0.19545766
+        ],
+        "mean": 0.19547737280000002,
+        "populationRelativeStandardDeviationPercent": 0.0841090274390641
+      },
+      "meanChangePercent": -1.2575231546920973
+    },
+    {
+      "identifier": "com.apple.dt.XCTMetric_CPU.time",
+      "name": "CPU Time",
+      "unit": "s",
+      "before": {
+        "name": "CPU Time",
+        "unit": "s",
+        "values": [
+          0.20207091900000002,
+          0.197857677,
+          0.198286332,
+          0.196824928,
+          0.196258021
+        ],
+        "mean": 0.1982595754,
+        "populationRelativeStandardDeviationPercent": 1.0275935958200935
+      },
+      "after": {
+        "name": "CPU Time",
+        "unit": "s",
+        "values": [
+          0.19597889300000002,
+          0.19565933900000002,
+          0.195450075,
+          0.195899763,
+          0.19572055200000002
+        ],
+        "mean": 0.1957417244,
+        "populationRelativeStandardDeviationPercent": 0.09517141665298771
+      },
+      "meanChangePercent": -1.2699769960265894
+    },
+    {
+      "identifier": "com.apple.dt.XCTMetric_CPU.instructions_retired",
+      "name": "CPU Instructions Retired",
+      "unit": "kI",
+      "before": {
+        "name": "CPU Instructions Retired",
+        "unit": "kI",
+        "values": [
+          3240944.252,
+          3243194.372,
+          3236610.409,
+          3238315.697,
+          3238166.421
+        ],
+        "mean": 3239446.2302,
+        "populationRelativeStandardDeviationPercent": 0.07206621931555279
+      },
+      "after": {
+        "name": "CPU Instructions Retired",
+        "unit": "kI",
+        "values": [
+          3237810.662,
+          3237576.925,
+          3237573.753,
+          3238696.298,
+          3237818.656
+        ],
+        "mean": 3237895.2588,
+        "populationRelativeStandardDeviationPercent": 0.012804055584536558
+      },
+      "meanChangePercent": -0.047877670743257106
+    },
+    {
+      "identifier": "com.apple.dt.XCTMetric_Memory.physical_peak",
+      "name": "Memory Peak Physical",
+      "unit": "kB",
+      "before": {
+        "name": "Memory Peak Physical",
+        "unit": "kB",
+        "values": [
+          40896.448,
+          40716.224,
+          40716.224,
+          40716.224,
+          40716.224
+        ],
+        "mean": 40752.2688,
+        "populationRelativeStandardDeviationPercent": 0.17689714492656144
+      },
+      "after": {
+        "name": "Memory Peak Physical",
+        "unit": "kB",
+        "values": [
+          41420.864,
+          41388.096,
+          41388.096,
+          41371.712,
+          41420.864
+        ],
+        "mean": 41397.9264,
+        "populationRelativeStandardDeviationPercent": 0.0474922338139169
+      },
+      "meanChangePercent": 1.584347617966242
+    }
+  ]
+}

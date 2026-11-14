@@ -1,0 +1,7 @@
+INSTALLED LIVE UI before=Optional(Обновлено: 14.11.2026, 17:13) count=Вакансий: 34
+INSTALLED LIVE UI success count=34 timestamp=Обновлено: 14.11.2026, 17:29 persistedAfterClick=true employers=6
+INSTALLED LIVE UI relaunch success count=34 unchangedTimestamp=true
+	 Executed 1 test, with 0 failures (0 unexpected) in 78.421 (78.423) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 78.421 (78.425) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 78.421 (78.427) seconds
+** TEST EXECUTE SUCCEEDED **

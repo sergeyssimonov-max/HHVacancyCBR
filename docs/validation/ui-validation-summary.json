@@ -1,0 +1,61 @@
+{
+  "sourceAndAssertionsChangedForUI": false,
+  "initialAfter": {
+    "bundle": "AfterTests.xcresult",
+    "failedTests": [
+      "testEmployerDropdownListsOptionsAndFiltersResults",
+      "testFilteringExpandedVacancyHidesDetailsAndAllowsReopening"
+    ],
+    "externalInterruptionEvidence": "after-xctest.log:1954-1958, Window application xyz.block.buzz.desktop followed by XCTest permission monitor NSInvalidArgumentException"
+  },
+  "serialAfter": {
+    "bundle": "AfterSerialUI.xcresult",
+    "tests": 21,
+    "skipped": 2,
+    "failures": 0,
+    "elapsedSeconds": 290.008
+  },
+  "fixedClockBefore": {
+    "bundle": "BeforeFixedClockUI.xcresult",
+    "tests": 2,
+    "failures": 0
+  },
+  "fixedClockAfter": {
+    "bundle": "AfterFixedClockUI.xcresult",
+    "tests": 2,
+    "failures": 0
+  },
+  "clock": {
+    "appliedOnlyTo": "UITargetAppEnvironmentVariables in scratch xctestrun files",
+    "cfAbsoluteTime": 790000000.0,
+    "visuallyVerifiedTimestamp": "13.01.2026, 15:26",
+    "changesToProductionBinaryOrSystemClock": false
+  },
+  "screenshots": {
+    "normalReport": "ui-serial-comparison.json",
+    "fixedClockReport": "ui-fixed-clock-comparison.json",
+    "rawNormalIdentical": 0,
+    "rawNormalCompared": 9,
+    "rawFixedClockIdentical": 0,
+    "rawFixedClockCompared": 2,
+    "fixedClockDifferencePixels": [
+      4437,
+      4414
+    ],
+    "fixedClockDifferencesBeyond12pxWindowFrame": [
+      0,
+      0
+    ],
+    "normalWindowContentDifferences": "Four window PNG differ only at native frame; one has a blinking 2x32 caret; one search-field border/caret rendering; two Trud result screenshots have different current-minute digits. Full desktop launch PNG includes unrelated desktop.",
+    "rawComparisonMaskedOrNormalized": false,
+    "normalWindowDimensions": [
+      1920,
+      1360
+    ],
+    "launchDesktopDimensions": [
+      5120,
+      2880
+    ]
+  },
+  "allUISubprocessesFinished": true
+}

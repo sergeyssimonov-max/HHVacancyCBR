@@ -1,0 +1,15 @@
+{
+  "archiveSHA256": "5a9146deac283959ad097bcb7d5ed29f7a1df0146bda9554bcbd7927bfbdc544",
+  "entries": 11303,
+  "files": 10450,
+  "archivedFileBytes": 1123294558,
+  "verification": "all archived file SHA256 values and member names match source before deletion",
+  "removedFromWorkingCopy": [
+    "build/",
+    "output/",
+    "releases/",
+    "scripts/__pycache__/"
+  ],
+  "archiveLocation": "~/Documents/Codex/HHVacancyCBR-archives/2026-11-14-finalization",
+  "excludedReproducibleDirectoryCount": 32
+}

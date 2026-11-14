@@ -1,0 +1,394 @@
+{
+  "runtime": [
+    {
+      "mode": "search",
+      "count": 200,
+      "before": {
+        "runs": 5,
+        "seconds": {
+          "median": 2.090381083326065,
+          "min": 2.072121249992051,
+          "max": 2.25734829166322
+        },
+        "cpu_seconds": {
+          "median": 2.074903,
+          "min": 2.057173,
+          "max": 2.228627
+        },
+        "peak_rss_bytes": {
+          "median": 36012032,
+          "min": 35569664,
+          "max": 37224448
+        }
+      },
+      "after": {
+        "runs": 5,
+        "seconds": {
+          "median": 2.0701879583357368,
+          "min": 2.0649852083297446,
+          "max": 2.093487041667686
+        },
+        "cpu_seconds": {
+          "median": 2.055752,
+          "min": 2.0512259999999998,
+          "max": 2.074646
+        },
+        "peak_rss_bytes": {
+          "median": 34750464,
+          "min": 34504704,
+          "max": 37453824
+        }
+      },
+      "semanticResult": {
+        "vacancies": 200,
+        "search_requests": 4
+      }
+    },
+    {
+      "mode": "pdf",
+      "count": 100,
+      "before": {
+        "runs": 5,
+        "seconds": {
+          "median": 2.998227374991984,
+          "min": 2.9848691250081174,
+          "max": 3.034763000003295
+        },
+        "cpu_seconds": {
+          "median": 2.7406539999999997,
+          "min": 2.729461,
+          "max": 2.765576
+        },
+        "peak_rss_bytes": {
+          "median": 41762816,
+          "min": 41009152,
+          "max": 46088192
+        },
+        "main_actor_max_gap_seconds": {
+          "median": 0.49063324999588076,
+          "min": 0.4846833333285758,
+          "max": 0.4936664166598348
+        }
+      },
+      "after": {
+        "runs": 5,
+        "seconds": {
+          "median": 2.9927616250060964,
+          "min": 2.9821256666764384,
+          "max": 2.9950319583294913
+        },
+        "cpu_seconds": {
+          "median": 2.73169,
+          "min": 2.715494,
+          "max": 2.7373730000000003
+        },
+        "peak_rss_bytes": {
+          "median": 41844736,
+          "min": 41713664,
+          "max": 42713088
+        },
+        "main_actor_max_gap_seconds": {
+          "median": 0.486890250002034,
+          "min": 0.4836538333329372,
+          "max": 0.49268233333714306
+        }
+      },
+      "semanticResult": {
+        "vacancies": 100,
+        "pages": 103,
+        "completed_cycles": 1,
+        "concurrent_mock_requests": 20,
+        "open_descriptors_under_1024": [
+          4
+        ]
+      }
+    },
+    {
+      "mode": "statistics",
+      "count": 2000,
+      "before": {
+        "runs": 5,
+        "seconds": {
+          "median": 12.66703133333067,
+          "min": 12.50767079165962,
+          "max": 12.804049624988693
+        },
+        "cpu_seconds": {
+          "median": 12.868074,
+          "min": 12.699577000000001,
+          "max": 12.934173000000001
+        },
+        "peak_rss_bytes": {
+          "median": 380174336,
+          "min": 375062528,
+          "max": 383926272
+        },
+        "main_actor_max_gap_seconds": {
+          "median": 0.10376108333002776,
+          "min": 0.0999337083339924,
+          "max": 0.11900070833507925
+        }
+      },
+      "after": {
+        "runs": 5,
+        "seconds": {
+          "median": 12.736356124994927,
+          "min": 12.669353666671668,
+          "max": 12.965096041662036
+        },
+        "cpu_seconds": {
+          "median": 12.935968,
+          "min": 12.837166999999999,
+          "max": 13.116738999999999
+        },
+        "peak_rss_bytes": {
+          "median": 376340480,
+          "min": 371507200,
+          "max": 379240448
+        },
+        "main_actor_max_gap_seconds": {
+          "median": 0.12270333332708105,
+          "min": 0.1076679166581016,
+          "max": 0.14725275000091642
+        }
+      },
+      "semanticResult": {
+        "vacancies": 2000,
+        "pages": 856,
+        "completed_cycles": 1,
+        "concurrent_mock_requests": 20,
+        "open_descriptors_under_1024": [
+          5
+        ]
+      }
+    },
+    {
+      "mode": "stress",
+      "count": 1,
+      "before": {
+        "runs": 1,
+        "seconds": {
+          "median": 0.5948327500082087,
+          "min": 0.5948327500082087,
+          "max": 0.5948327500082087
+        },
+        "cpu_seconds": {
+          "median": 0.378647,
+          "min": 0.378647,
+          "max": 0.378647
+        },
+        "peak_rss_bytes": {
+          "median": 38649856,
+          "min": 38649856,
+          "max": 38649856
+        },
+        "main_actor_max_gap_seconds": {
+          "median": 0.24853437500132713,
+          "min": 0.24853437500132713,
+          "max": 0.24853437500132713
+        }
+      },
+      "after": {
+        "runs": 1,
+        "seconds": {
+          "median": 0.5938425833301153,
+          "min": 0.5938425833301153,
+          "max": 0.5938425833301153
+        },
+        "cpu_seconds": {
+          "median": 0.382317,
+          "min": 0.382317,
+          "max": 0.382317
+        },
+        "peak_rss_bytes": {
+          "median": 40124416,
+          "min": 40124416,
+          "max": 40124416
+        },
+        "main_actor_max_gap_seconds": {
+          "median": 0.24477683333680034,
+          "min": 0.24477683333680034,
+          "max": 0.24477683333680034
+        }
+      },
+      "semanticResult": {
+        "vacancies": 1,
+        "pages": 40,
+        "completed_cycles": 1,
+        "concurrent_mock_requests": 20,
+        "open_descriptors_under_1024": [
+          4
+        ]
+      }
+    },
+    {
+      "mode": "pdf",
+      "count": 500,
+      "before": {
+        "runs": 1,
+        "seconds": {
+          "median": 15.189677249989472,
+          "min": 15.189677249989472,
+          "max": 15.189677249989472
+        },
+        "cpu_seconds": {
+          "median": 14.307661999999999,
+          "min": 14.307661999999999,
+          "max": 14.307661999999999
+        },
+        "peak_rss_bytes": {
+          "median": 118439936,
+          "min": 118439936,
+          "max": 118439936
+        },
+        "main_actor_max_gap_seconds": {
+          "median": 1.6342758749960922,
+          "min": 1.6342758749960922,
+          "max": 1.6342758749960922
+        }
+      },
+      "after": {
+        "runs": 1,
+        "seconds": {
+          "median": 15.362579333333997,
+          "min": 15.362579333333997,
+          "max": 15.362579333333997
+        },
+        "cpu_seconds": {
+          "median": 14.477127,
+          "min": 14.477127,
+          "max": 14.477127
+        },
+        "peak_rss_bytes": {
+          "median": 113688576,
+          "min": 113688576,
+          "max": 113688576
+        },
+        "main_actor_max_gap_seconds": {
+          "median": 1.6422413750115084,
+          "min": 1.6422413750115084,
+          "max": 1.6422413750115084
+        }
+      },
+      "semanticResult": {
+        "vacancies": 500,
+        "pages": 513,
+        "completed_cycles": 1,
+        "concurrent_mock_requests": 20,
+        "open_descriptors_under_1024": [
+          4
+        ]
+      }
+    },
+    {
+      "mode": "soak",
+      "count": 500,
+      "before": {
+        "runs": 1,
+        "seconds": {
+          "median": 18.692024541669525,
+          "min": 18.692024541669525,
+          "max": 18.692024541669525
+        },
+        "cpu_seconds": {
+          "median": 18.753159,
+          "min": 18.753159,
+          "max": 18.753159
+        },
+        "peak_rss_bytes": {
+          "median": 148455424,
+          "min": 148455424,
+          "max": 148455424
+        },
+        "main_actor_max_gap_seconds": {
+          "median": 2.1025645833433373,
+          "min": 2.1025645833433373,
+          "max": 2.1025645833433373
+        }
+      },
+      "after": {
+        "runs": 1,
+        "seconds": {
+          "median": 18.55906479166879,
+          "min": 18.55906479166879,
+          "max": 18.55906479166879
+        },
+        "cpu_seconds": {
+          "median": 18.607276,
+          "min": 18.607276,
+          "max": 18.607276
+        },
+        "peak_rss_bytes": {
+          "median": 150487040,
+          "min": 150487040,
+          "max": 150487040
+        },
+        "main_actor_max_gap_seconds": {
+          "median": 2.047970916668419,
+          "min": 2.047970916668419,
+          "max": 2.047970916668419
+        }
+      },
+      "semanticResult": {
+        "vacancies": 500,
+        "pages": 215,
+        "completed_cycles": 6,
+        "concurrent_mock_requests": 20,
+        "open_descriptors_under_1024": [
+          5,
+          5,
+          5,
+          5,
+          5,
+          5
+        ]
+      }
+    }
+  ],
+  "filter": [
+    {
+      "version": "before",
+      "runs": 5,
+      "seconds": 38.672684083,
+      "processCPUSeconds": 38.594715,
+      "processPeakRSSBytes": 380698624,
+      "hhLoadWallSeconds": 16.238975500004017,
+      "trudLoadWallSeconds": 0.7051948750013253,
+      "maximumSynchronousFilterSeconds": 2.081208041665377,
+      "sources": {
+        "hh.ru": {
+          "filterWallSeconds": 3.684382250008639,
+          "filterCPUSeconds": 3.667435000000001,
+          "cachedReadWallSeconds": 1.708336640149355e-06
+        },
+        "trudvsem.ru": {
+          "filterWallSeconds": 7.90116095833946,
+          "filterCPUSeconds": 7.886573000000016,
+          "cachedReadWallSeconds": 1.666689058765769e-06
+        }
+      }
+    },
+    {
+      "version": "after",
+      "runs": 5,
+      "seconds": 38.783952375000005,
+      "processCPUSeconds": 38.499185,
+      "processPeakRSSBytes": 366215168,
+      "hhLoadWallSeconds": 16.2903781250061,
+      "trudLoadWallSeconds": 0.703214624998509,
+      "maximumSynchronousFilterSeconds": 2.063890874997014,
+      "sources": {
+        "hh.ru": {
+          "filterWallSeconds": 3.6797214166872436,
+          "filterCPUSeconds": 3.676003000000005,
+          "cachedReadWallSeconds": 1.5416444512084126e-06
+        },
+        "trudvsem.ru": {
+          "filterWallSeconds": 7.81185654165165,
+          "filterCPUSeconds": 7.808427000000012,
+          "cachedReadWallSeconds": 2.0416919142007828e-06
+        }
+      }
+    }
+  ]
+}

@@ -2,6 +2,23 @@
 
 Приложение macOS/SwiftUI для вакансий Банка России и связанных организаций. Два независимых источника: **hh.ru** и **trudvsem.ru**, именно в этом порядке. Приложение не является официальным продуктом Банка России или операторов порталов.
 
+## Скачать и установить
+
+Текущий стабильный выпуск — [ЦБВакансии 1.3.4 (15)](https://github.com/sergeyssimonov-max/HHVacancyCBR/releases/tag/v1.3.4-15):
+
+- [Установщик DMG](https://github.com/sergeyssimonov-max/HHVacancyCBR/releases/download/v1.3.4-15/HHVacancyCBR_1.3.4_15_macos13_arm64.dmg).
+- [Контрольная сумма SHA-256](https://github.com/sergeyssimonov-max/HHVacancyCBR/releases/download/v1.3.4-15/HHVacancyCBR_1.3.4_15_macos13_arm64.dmg.sha256).
+
+Требования: **macOS 13 или новее, Apple silicon (arm64)**. Для обновления вакансий нужен интернет. Если GitHub запрашивает вход, используйте аккаунт с доступом к репозиторию.
+
+Скачайте оба файла в один каталог и проверьте образ:
+
+```sh
+shasum -a 256 -c HHVacancyCBR_1.3.4_15_macos13_arm64.dmg.sha256
+```
+
+Ожидаемый результат — `OK`. Откройте DMG, перенесите `ЦБВакансии.app` в «Программы» и запустите. При обновлении предварительно завершите приложение; каталог пользовательских данных удалять не нужно. Сборка подписана **ad hoc, без нотарификации Apple**: при блокировке используйте разрешение открытия в «Системные настройки → Конфиденциальность и безопасность». Developer ID в этом выпуске не используется.
+
 ## Возможности
 
 - У каждой вкладки собственные обновление, отмена, сообщения, фильтры, поиск и снимок. Вакансии всегда отсортированы от новых к старым. Переключение вкладки не запускает сеть. Первое получение выполняется кнопкой «Обновить».
@@ -24,6 +41,7 @@
 
 ```sh
 python3 scripts/verify_independence.py
+python3 scripts/verify_project_sources.py
 python3 -m unittest discover -s scripts/tests -v
 xcodebuild -project HHVacancyCBR/HHVacancyCBR.xcodeproj -scheme HHVacancyCBR \
   -configuration Debug -destination 'platform=macOS,arch=arm64' \
@@ -31,7 +49,7 @@ xcodebuild -project HHVacancyCBR/HHVacancyCBR.xcodeproj -scheme HHVacancyCBR \
   test -only-testing:HHVacancyCBRTests
 ```
 
-UI-тесты выполняются той же командой с `-only-testing:HHVacancyCBRUITests`. Для них нужен интерактивный сеанс macOS с разрешённой автоматизацией Xcode. Тестовые настройки имеют префикс `HHVACANCYCBR_`; fixtures, временные файлы и bundle ID принадлежат новому приложению. Опциональные сетевые тесты выключены по умолчанию. Их переменные и тематические файлы описаны в [TESTING.md](docs/TESTING.md).
+UI-тесты выполняются той же командой с `-only-testing:HHVacancyCBRUITests`. Для них нужен интерактивный сеанс macOS с разрешённой автоматизацией Xcode. Тестовые настройки имеют префикс `HHVACANCYCBR_`; fixtures и временные файлы изолированы от обычных данных приложения. Опциональные сетевые тесты выключены по умолчанию. Их переменные и тематические файлы описаны в [TESTING.md](docs/TESTING.md).
 
 Авторизация сохранена по прямому указанию владельца: application token хранится открытым текстом в `HHVacancyCBR/HHVacancyCBR/HHAuthConfig.swift` и входит в Git и сборку. Локальная конфигурация и обращение к исходному проекту не требуются. Код проверки не печатает значение токена.
 
@@ -43,7 +61,7 @@ UI-тесты выполняются той же командой с `-only-test
 
 ## Разработчику и автору форка
 
-[Архитектура](docs/ARCHITECTURE.md) · [Разработка](docs/DEVELOPMENT.md) · [Проверки](docs/TESTING.md) · [Независимый форк](docs/FORKING.md) · [Участие](CONTRIBUTING.md) · [Отчёт о рефакторинге](docs/REFACTORING_REPORT.md)
+[Вся документация](docs/README.md) · [Архитектура](docs/ARCHITECTURE.md) · [Разработка](docs/DEVELOPMENT.md) · [Проверки](docs/TESTING.md) · [Независимый форк](docs/FORKING.md) · [Участие](CONTRIBUTING.md) · [Отчёт о рефакторинге](docs/REFACTORING_REPORT.md)
 
 У основного проекта пока нет отдельной лицензии; условия публичного распространения кода должен определить владелец. Происхождение и лицензия включённой реализации Streebog сохранены в `HHVacancyCBR/HHVacancyCBR/Vendor/Streebog/`. Создание форка не меняет идентичность оригинала автоматически; для параллельной установки выполните согласованные шаги из FORKING.md.
 
@@ -75,6 +93,6 @@ cd releases
 shasum -a 256 -c HHVacancyCBR_1.3.4_15_macos13_arm64.dmg.sha256
 ```
 
-Собственный CI проверяет конфигурацию, инструменты выпуска, Debug, Release и UI-тесты. Workflow `Release DMG` собирает установочный образ по тегу `v*` или ручному запуску и сохраняет его артефактом GitHub Actions.
+Собственный CI проверяет конфигурацию, инструменты выпуска, Debug, Release и UI-тесты. Workflow `Release DMG` собирает установочный образ по тегу `v*` или ручному запуску и сохраняет его артефактом GitHub Actions. Он не создаёт GitHub Release автоматически; локальный `publish_release.py` также публикует только в каталог. Порядок проверки, аннотированного тега и публикации — [RELEASING.md](docs/RELEASING.md).
 
 [Результаты проверки и известные ограничения](docs/VALIDATION.md) · [Происхождение проекта](docs/PROVENANCE.md)

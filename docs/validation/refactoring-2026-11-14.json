@@ -1,0 +1,40 @@
+{
+  "kind": "review_of_preserved_artifacts_not_a_new_test_run",
+  "date": "2026-11-14",
+  "baselineHEAD": "b426ba84d196841740ee7aa6297211376c781f33",
+  "implementationCommit": "0ecd2f6ce0a5a0a37edda04d63cf8c7733572a2e",
+  "baselineFilesVerified": 92,
+  "production": {
+    "beforeDeclarations": 135,
+    "afterDeclarations": 135,
+    "passed": true,
+    "missingDeclarations": [],
+    "addedDeclarations": [],
+    "changedDeclarationBodiesOrConditions": [],
+    "unexpectedChangedOriginalFiles": []
+  },
+  "movedDeclarations": 39,
+  "byteIdenticalOriginalFiles": 41,
+  "testInventory": {
+    "beforeCount": 204,
+    "afterCount": 204,
+    "removed": [],
+    "added": [],
+    "changed": []
+  },
+  "pdf": {
+    "documents": 11,
+    "pages": 225,
+    "manifestsExactlyEqual": true,
+    "beforeManifestSHA256": "35eb67bf38f24da5ec46e79538d230596f92b0fe529838369da00d3c97ea9a68"
+  },
+  "sourceArtifacts": {
+    "production-equivalence.json": "9afc71e18d5244889d75e4a529b529d6700c056a58138c1efb68e53f2e8c1b26",
+    "test-source-equivalence.json": "bca5150a26e7a9bafbf632eb2285faf5e32f21809abd38bf10a41eacdecfbe4b",
+    "before-source-manifest.json": "4310f5a2faa56a052075b8580abc9242c1f2e050216a016881e73732829bf682",
+    "before-xctest.log": "4a1156af098f85e7453ce46ccf0d0a4064288af941a25e31e7fcf9efde61efc3",
+    "after-xctest.log": "6d69aad4b44d84bd5a5fcd76125ebfa83c1d0377babf269e3a4c5f5ba2ed5b6e",
+    "after-serial-ui.log": "fb0717089c2121faa6e931a472f0052916efd61a935feb8d966c7cd278ca66fd",
+    "streebog.log": "6cd510899d58ec75c6d3fdc75c4aa1dfce12fb546ffccf18b5e4a621e9b27521"
+  }
+}
