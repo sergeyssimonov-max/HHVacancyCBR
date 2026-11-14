@@ -16,6 +16,8 @@ xcodebuild -project HHVacancyCBR/HHVacancyCBR.xcodeproj -scheme HHVacancyCBR \
 
 Не подменяйте установленное приложение тестовой сборкой. UI fixtures работают в Debug при `HHVACANCYCBR_UI_TEST_MODE=1`; сценарий задаёт `HHVACANCYCBR_UI_TEST_SCENARIO`. Тесты задают их сами. Production composition не читает фикстуры в Release. Обычные unit и UI-тесты используют синтетические данные; opt-in тесты могут обращаться к сети и некоторые — к установленному приложению, поэтому не включайте их глобально.
 
+Обычный Run в Xcode с исходным Bundle ID обращается к контейнеру установленного оригинала. Для независимого продукта сначала выполните [настройку идентичности форка](FORKING.md#идентичность-и-параллельная-установка). Переменная fixtures не заменяет отдельный Bundle ID при работе с реальными данными.
+
 ## Данные и диагностика
 
 Bundle ID `local.sergey.HHVacancyCBR`. Sandbox хранит файлы внутри контейнера приложения, в `Data/Library/Application Support/HHVacancyCBR`. Не стирайте контейнер для решения ошибки теста. Перед ручной проверкой установленной версии сохраните всю папку, включая `documented-archive-v1`, а не только список вакансий. Старый `favorites.json` не изменяется.

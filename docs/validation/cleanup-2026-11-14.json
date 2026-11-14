@@ -1,0 +1,55 @@
+{
+  "archive": "~/Documents/Codex/HHVacancyCBR-archives/2026-11-14-docs-polish",
+  "archive_manifest_sha256": "7200b6dca0366d4bde5be0121872d82125c262fdbf09610659290c8699006c1c",
+  "archived_files": 862,
+  "archived_bytes": 42452779,
+  "removed": [
+    {
+      "path": "build/install-b70cd73-2026-11-14/DerivedData",
+      "bytes": 244921615
+    },
+    {
+      "path": "build/release-135/Debug",
+      "bytes": 245161553
+    },
+    {
+      "path": "build/release-135/SmokeRunner",
+      "bytes": 245136536
+    },
+    {
+      "path": "build/release-135/StrictRelease",
+      "bytes": 99300927
+    },
+    {
+      "path": "build/release-135/module-cache",
+      "bytes": 53826212
+    },
+    {
+      "path": "build/release-135/fixture-clock.dylib",
+      "bytes": 33440
+    },
+    {
+      "path": "build/release-135/pdf-check",
+      "bytes": 3079928
+    },
+    {
+      "path": "build/release-135/streebog.o",
+      "bytes": 24712
+    },
+    {
+      "path": "build/release-135/github-draft-download",
+      "bytes": 1071286
+    },
+    {
+      "path": "build/release-135/github-published-download",
+      "bytes": 1071286
+    },
+    {
+      "path": "build/release-135/dropbox-download",
+      "bytes": 1071286
+    }
+  ],
+  "removed_bytes": 894698781,
+  "tracked_files_removed": [],
+  "application_and_final_dmg_rebuilt": false
+}

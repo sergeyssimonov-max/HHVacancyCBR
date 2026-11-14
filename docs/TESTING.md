@@ -22,7 +22,7 @@ git diff --check
 
 Используйте новый путь xcresult для каждого прогона. Полный Debug `test` включает сборку, unit и UI; для отдельного запуска добавьте `-only-testing:HHVacancyCBRTests` или `-only-testing:HHVacancyCBRUITests`. Для UI требуется интерактивный сеанс macOS с разрешением автоматизации. CI `.github/workflows/ci.yml` дополнительно разделяет Debug build/unit, strict Release и UI на jobs; он не устанавливает сборку в `/Applications`.
 
-В релизном `b70cd73` 183 unit-теста находятся в тематических extensions `HHVacancyCBRTests` и классе `PDFSourceEvidenceTests`; 21 UI-сценарий — в двух исходных UI-классах. При структурном рефакторинге их class/selector и `@MainActor` сохранены, выборочные команды остаются рабочими. Последующие `e5a61db` / `bac67db` добавляют в `main` пять unit-сценариев и один UI-сценарий фильтра полевых учреждений; они не входят в `v1.3.4-15`. Проверка inventory:
+В проверенном выпуске `v1.3.5-16` (`92934ec`) найдено 188 unit-тестов и 22 UI-теста; при обычном запуске штатно пропускаются 5 unit и 2 UI opt-in сценария. Unit-тесты находятся в тематических extensions `HHVacancyCBRTests` и классе `PDFSourceEvidenceTests`, UI — в двух исходных UI-классах. У предыдущего `v1.3.4-15` (`b70cd73`) было 183 unit и 21 UI: пять unit и один UI добавлены исправлениями `e5a61db` / `bac67db`. В форке считайте фактически найденные тесты, а не подгоняйте набор под эти исторические числа. Проверка inventory:
 
 ```sh
 python3 scripts/compare_test_inventory.py /path/to/before/source /path/to/after/source
@@ -56,10 +56,12 @@ PDF equivalence harness компилируется с одним и тем же 
 
 ## Чистая сборка и локальный DMG
 
+Этот этап нужен при подготовке нового бинарного выпуска. Для изменений только документации достаточно проверки ссылок/команд, Python-проверок и обычного CI точного SHA; установленное приложение и опубликованный DMG не заменяются. CI выполняет собственные сборки в чистом checkout, не устанавливая их на Mac владельца.
+
 Проверьте финальный набор в самостоятельном чистом checkout/экспорте без build, пользовательских файлов, абсолютных paths, соседнего repo и неотслеживаемых зависимостей. В чистом коммите:
 
 ```sh
-bash scripts/release.sh --output-dir "$PWD/release-check"
+bash scripts/release.sh --output-dir "$PWD/releases/verification"
 ```
 
 Выберите новый output directory. Сценарий сам выполняет `git archive`, strict Release, подпись/entitlements, hardened runtime, hdiutil verification и безопасную публикацию локальных двух файлов. Это не публикация GitHub release. Проверка повторного запуска в уже занятый output должна завершиться отказом, не изменив готовый DMG/hash. Developer ID/нотаризация остаются опциональными и требуют настроек владельца. При dirty main не коммитьте чужую работу: используйте явную standalone snapshot-копию, записав её технический SHA в отчёт.
