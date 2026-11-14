@@ -16,8 +16,8 @@ final class HHVacancyCBRUITests: XCTestCase {
         let installedURL = URL(fileURLWithPath: "/Applications/ЦБВакансии.app", isDirectory: true)
         let installed = try XCTUnwrap(Bundle(url: installedURL))
         XCTAssertEqual(installed.bundleIdentifier, "local.sergey.HHVacancyCBR")
-        XCTAssertEqual(installed.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String, "1.3.4")
-        XCTAssertEqual(installed.object(forInfoDictionaryKey: "CFBundleVersion") as? String, "15")
+        XCTAssertEqual(installed.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String, "1.3.5")
+        XCTAssertEqual(installed.object(forInfoDictionaryKey: "CFBundleVersion") as? String, "16")
         let snapshotPath = try XCTUnwrap(environment["HHVACANCYCBR_LIVE_SNAPSHOT_PATH"])
         let snapshotURL = URL(fileURLWithPath: snapshotPath)
         func readSnapshot() throws -> [String: Any] {
@@ -106,8 +106,8 @@ final class HHVacancyCBRUITests: XCTestCase {
         continueAfterFailure = false
         let installed = try XCTUnwrap(Bundle(url: URL(fileURLWithPath: "/Applications/ЦБВакансии.app")))
         XCTAssertEqual(installed.bundleIdentifier, "local.sergey.HHVacancyCBR")
-        XCTAssertEqual(installed.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String, "1.3.4")
-        XCTAssertEqual(installed.object(forInfoDictionaryKey: "CFBundleVersion") as? String, "15")
+        XCTAssertEqual(installed.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String, "1.3.5")
+        XCTAssertEqual(installed.object(forInfoDictionaryKey: "CFBundleVersion") as? String, "16")
         let root = URL(fileURLWithPath: try XCTUnwrap(environment["HHVACANCYCBR_LIVE_DATA_PATH"]))
         let hhURL = root.appendingPathComponent("vacancies.json")
         let trudURL = root.appendingPathComponent("vacancies-trudvsem.json")
