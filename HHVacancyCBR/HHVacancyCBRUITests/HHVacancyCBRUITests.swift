@@ -245,6 +245,7 @@ final class HHVacancyCBRUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Полное описание вакансии."].waitForExistence(timeout: 5))
     }
 
+    @MainActor
     func testFieldFilterBelongsOnlyToBankOfRussiaOnBothSources() {
         let app = launch()
         app.buttons["searchVacanciesButton"].click()
