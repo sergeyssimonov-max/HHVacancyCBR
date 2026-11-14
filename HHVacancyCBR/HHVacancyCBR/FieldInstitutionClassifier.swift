@@ -25,6 +25,7 @@ enum FieldInstitutionClassifier {
     static func classify(summary: HHVacancySummary, details: HHVacancyDetails? = nil,
                          registry: [FieldInstitutionRegistryEntry] = registry) -> FieldInstitutionClassification {
         let employerID = details?.employer?.id ?? summary.employer?.id ?? ""
+        guard isEligibleHHEmployer(employerID, registry: registry) else { return .unidentified }
         if let entry = registry.first(where: { !$0.source.isEmpty && $0.employerIDs.contains(employerID) }) {
             return .init(isMember: true, reason: "Подтверждённый аккаунт hh.ru \(employerID): \(entry.source)")
         }
@@ -34,6 +35,15 @@ enum FieldInstitutionClassifier {
                             details?.brandedDescription?.readableHTMLText, details?.address?.description]
         return classifyWorkplace(eligible: true, workplaceFields: workplaceFields, descriptions: descriptions,
                                  provenance: "hh.ru, аккаунт 47858", registry: registry)
+    }
+
+    static func isEligibleHHEmployer(_ employerID: String,
+                                    registry: [FieldInstitutionRegistryEntry] = registry) -> Bool {
+        // A subsidiary's known account cannot become a field institution via aliases or configuration.
+        if let organization = OrganizationRegistry.all.first(where: { $0.hhEmployerIDs.contains(employerID) }) {
+            return organization.hasFieldInstitutions
+        }
+        return registry.contains { !$0.source.isEmpty && $0.employerIDs.contains(employerID) }
     }
 
     static func classifyWorkplace(eligible: Bool, workplaceFields: [String?], descriptions: [String?],

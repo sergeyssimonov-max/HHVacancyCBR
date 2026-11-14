@@ -8,6 +8,57 @@ import SwiftUI
 extension HHVacancyCBRTests {
 
     @MainActor
+    func testHHFieldFilterResetsForEveryOtherOrganizationAndKeepsExportConsistent() async throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let organizations = OrganizationRegistry.available(on: .hh)
+        let rows = organizations.map { organization in
+            VacancySearchResult(summary: fieldSummary("Кассир ПУ Инское", id: organization.id,
+                employer: organization.hhEmployerIDs[0]), location: .remote)
+        } + [VacancySearchResult(summary: fieldSummary("Аналитик", id: "ordinary"), location: .unknown)]
+        let store = VacancySnapshotStore(fileURL: directory.appendingPathComponent("snapshot.json"))
+        try store.save(.init(values: rows, issues: [], updatedAt: .distantPast))
+        let model = VacancySearchViewModel(apiClient: FixedSummaryAPIClient(rows: []),
+            employerStore: TestEmployerStore(entries: organizations.map {
+                .init(id: $0.hhEmployerIDs[0], name: $0.name, comment: "test")
+            }), areaStore: AreaDirectoryStore(fileURL: directory.appendingPathComponent("areas.json")), snapshotStore: store)
+        await model.loadPersistenceIfNeeded()
+
+        for selection in ["all", "bank_of_russia"] {
+            model.selectedEmployerID = selection
+            XCTAssertTrue(model.isFieldInstitutionFilterAvailable)
+            model.fieldInstitutionsOnly = true
+            XCTAssertEqual(model.displayedResults.map(\.id), ["bank_of_russia"])
+            XCTAssertEqual(model.statisticsReportSnapshot().categoryName, "Полевые учреждения")
+            model.selectedRegionID = "unknown"
+            XCTAssertTrue(model.displayedResults.isEmpty)
+            model.selectedRegionID = "all"
+        }
+
+        for organization in organizations where organization.id != "bank_of_russia" {
+            model.selectedEmployerID = "all"
+            model.fieldInstitutionsOnly = true
+            model.selectedEmployerID = organization.id
+            XCTAssertFalse(model.isFieldInstitutionFilterAvailable)
+            XCTAssertFalse(model.fieldInstitutionsOnly)
+            XCTAssertEqual(model.displayedResults.map(\.id), [organization.id])
+            model.fieldInstitutionsOnly = true // The model enforces the rule without a SwiftUI view.
+            XCTAssertFalse(model.fieldInstitutionsOnly)
+            let report = model.statisticsReportSnapshot()
+            XCTAssertEqual(report.categoryName, "Все вакансии")
+            XCTAssertEqual(report.entries.map(\.id), [organization.id])
+            XCTAssertFalse(try XCTUnwrap(report.entries.first).isFieldInstitution)
+            XCTAssertNil(report.documentContext.filters["Категория"])
+        }
+        model.selectedEmployerID = "hh_account_999"
+        XCTAssertFalse(model.isFieldInstitutionFilterAvailable)
+        model.selectedEmployerID = "bank_of_russia"
+        XCTAssertTrue(model.isFieldInstitutionFilterAvailable)
+        XCTAssertFalse(model.fieldInstitutionsOnly)
+        XCTAssertEqual(Set(model.displayedResults.map(\.id)), ["bank_of_russia", "ordinary"])
+    }
+
+    @MainActor
     func testViewModelUsesEmployerAndRegionFiltersWithANDSemantics() async throws {
         let employerStore = TestEmployerStore(entries: [
             .init(id: "47858", name: "Банк России", comment: "test"),

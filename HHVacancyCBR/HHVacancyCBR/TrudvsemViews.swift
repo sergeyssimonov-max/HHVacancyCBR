@@ -41,7 +41,10 @@ struct TrudvsemViews: View {
             }.pickerStyle(.segmented).frame(width: 220, height: 32).accessibilityIdentifier("vacancyListModePicker")
             Picker("Категория", selection: $viewModel.fieldInstitutionsOnly) {
                 Text("Все вакансии").tag(false); Text("Полевые учреждения").tag(true)
-            }.labelsHidden().frame(width: 190).accessibilityIdentifier("categoryFilterPicker")
+            }.labelsHidden().frame(width: 190)
+                .disabled(!viewModel.isFieldInstitutionFilterAvailable)
+                .help("Полевые учреждения относятся только к самому Банку России.")
+                .accessibilityIdentifier("categoryFilterPicker")
             Picker("Работодатель", selection: $viewModel.selectedEmployerID) {
                 Text("Все работодатели").tag("all")
                 ForEach(OrganizationRegistry.available(on: .trudvsem)) { Text($0.name).tag($0.id) }
@@ -60,7 +63,8 @@ struct TrudvsemViews: View {
         HStack(spacing: 12) {
             VacancyStatusSummary(
                 vacancyCountMessage: VacancyDisplayFormat.vacancyCount(viewModel.displayedResults.count),
-                fieldInstitutionCount: viewModel.displayedResults.filter { $0.fieldInstitution.isMember }.count,
+                fieldInstitutionCount: viewModel.isFieldInstitutionFilterAvailable
+                    ? viewModel.displayedResults.filter { $0.fieldInstitution.isMember }.count : nil,
                 updatedAtMessage: viewModel.updatedAt.map { VacancyDisplayFormat.updatedAt($0) },
                 loadingEmployerName: viewModel.isLoading ? viewModel.currentEmployerName : nil)
             Spacer()

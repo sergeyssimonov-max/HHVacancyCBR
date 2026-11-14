@@ -15,9 +15,22 @@ final class TrudvsemViewModel: ObservableObject {
     @Published private(set) var updatedAt: Date?
     @Published private(set) var metrics: [TrudvsemCollection.Metrics] = []
     @Published private(set) var collectionIssues: [String] = []
-    @Published var selectedEmployerID = "all" { didSet { displayedCache = nil } }
+    @Published var selectedEmployerID = "all" {
+        didSet {
+            if fieldInstitutionsOnly && !isFieldInstitutionFilterAvailable { fieldInstitutionsOnly = false }
+            displayedCache = nil
+        }
+    }
     @Published var selectedRegionID = "all" { didSet { displayedCache = nil } }
-    @Published var fieldInstitutionsOnly = false { didSet { displayedCache = nil } }
+    @Published var fieldInstitutionsOnly = false {
+        didSet {
+            if fieldInstitutionsOnly && !isFieldInstitutionFilterAvailable { fieldInstitutionsOnly = false }
+            displayedCache = nil
+        }
+    }
+    var isFieldInstitutionFilterAvailable: Bool {
+        OrganizationRegistry.supportsFieldInstitutionFilter(for: selectedEmployerID)
+    }
     @Published var searchDraft = ""
     @Published private(set) var searchText = "" { didSet { displayedCache = nil } }
     func applySearch() { searchText = searchDraft.trimmingCharacters(in: .whitespacesAndNewlines) }

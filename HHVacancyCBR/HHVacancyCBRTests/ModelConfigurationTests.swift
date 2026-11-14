@@ -50,6 +50,36 @@ extension HHVacancyCBRTests {
         XCTAssertFalse(HHAuthConfig.configuredAccessToken?.isEmpty ?? true)
     }
 
+    func testFieldInstitutionsExcludeRelatedHHEmployersEvenWithRegistryEvidence() {
+        for organization in OrganizationRegistry.all where organization.id != "bank_of_russia" {
+            for employerID in organization.hhEmployerIDs {
+                let summary = fieldSummary("Кассир ПУ Инское", employer: employerID)
+                XCTAssertFalse(FieldInstitutionClassifier.classify(summary: summary).isMember, organization.name)
+                XCTAssertFalse(FieldInstitutionClassifier.classify(summary: summary, registry: [
+                    .init(aliases: ["Инское"], employerIDs: [employerID], source: FieldInstitutionClassifier.source)
+                ]).isMember, organization.name)
+            }
+        }
+    }
+
+    func testHHResultRejectsForeignCachedClassificationAndUsesDetailedEmployer() throws {
+        let saved = FieldInstitutionClassification(isMember: true, reason: "Сохраненная отметка")
+        var summary = fieldSummary("Кассир ПУ Инское")
+        summary.fieldInstitutionEvidence = saved
+        let employerIDs = OrganizationRegistry.all.filter { $0.id != "bank_of_russia" }.flatMap(\.hhEmployerIDs) + ["999", ""]
+        for employerID in employerIDs {
+            let details = VacancySearchResult(summary: fieldSummary(summary.name, employer: employerID), location: .unknown).details
+            let result = VacancySearchResult(id: summary.id, summary: summary, details: details,
+                isDetailLoaded: true, classification: saved)
+            XCTAssertFalse(result.isFieldInstitution, employerID)
+            XCTAssertEqual(result.summary.fieldInstitutionEvidence, .unidentified)
+            XCTAssertFalse(VacancyStatisticsReport.Entry(result).isFieldInstitution)
+            let snapshot = VacancySnapshot(values: [result], issues: [], updatedAt: .distantPast)
+            let restored = try JSONDecoder().decode(VacancySnapshot.self, from: JSONEncoder().encode(snapshot))
+            XCTAssertFalse(try XCTUnwrap(restored.results.first).isFieldInstitution)
+        }
+    }
+
     func testEmployerConfigurationRejectsEmptyDuplicateAndInvalidIDs() throws {
         XCTAssertThrowsError(try EmployerConfiguration(version: 1, employers: []).validated())
         XCTAssertThrowsError(try EmployerConfiguration(version: 1, employers: [

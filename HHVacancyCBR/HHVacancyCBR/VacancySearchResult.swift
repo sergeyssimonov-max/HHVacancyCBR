@@ -30,7 +30,8 @@ struct VacancySearchResult: Identifiable {
         classification: FieldInstitutionClassification? = nil
     ) {
         let classification = classification ?? FieldInstitutionClassifier.classify(summary: summary, details: details)
-        self.fieldInstitution = classification
+        let employerID = details.employer?.id ?? summary.employer?.id ?? ""
+        self.fieldInstitution = FieldInstitutionClassifier.isEligibleHHEmployer(employerID) ? classification : .unidentified
         self.id = id
         var classifiedSummary = summary
         classifiedSummary.fieldInstitutionEvidence = self.fieldInstitution

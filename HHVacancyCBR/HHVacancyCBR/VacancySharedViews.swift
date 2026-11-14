@@ -3,7 +3,7 @@ import SwiftUI
 @MainActor
 struct VacancyStatusSummary: View {
     let vacancyCountMessage: String
-    let fieldInstitutionCount: Int
+    let fieldInstitutionCount: Int?
     let updatedAtMessage: String?
     let loadingEmployerName: String?
 
@@ -11,8 +11,11 @@ struct VacancyStatusSummary: View {
         Group {
             Text(vacancyCountMessage)
                 .accessibilityIdentifier("displayedVacancyCount")
-            Text("Полевые учреждения: \(fieldInstitutionCount)")
-                .accessibilityIdentifier("fieldInstitutionCount")
+            if let fieldInstitutionCount {
+                Text("Полевые учреждения: \(fieldInstitutionCount)")
+                    .help("Вакансии полевых учреждений самого Банка России.")
+                    .accessibilityIdentifier("fieldInstitutionCount")
+            }
             if let updatedAtMessage {
                 Text(updatedAtMessage)
                     .accessibilityIdentifier("vacancyUpdateStatus")

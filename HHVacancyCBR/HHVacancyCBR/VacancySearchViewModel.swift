@@ -43,9 +43,25 @@ final class VacancySearchViewModel: ObservableObject {
     @Published private(set) var searchText = "" { didSet { displayedCache = nil } }
     func applySearch() { searchText = searchDraft.trimmingCharacters(in: .whitespacesAndNewlines) }
     func clearSearch() { searchDraft = ""; searchText = "" }
-    @Published var fieldInstitutionsOnly = false { didSet { displayedCache = nil; reconcileExpanded() } }
-    @Published var selectedEmployerID = "all" { didSet { displayedCache = nil; reconcileExpanded() } }
+    @Published var fieldInstitutionsOnly = false {
+        didSet {
+            if fieldInstitutionsOnly && !isFieldInstitutionFilterAvailable { fieldInstitutionsOnly = false }
+            displayedCache = nil
+            reconcileExpanded()
+        }
+    }
+    @Published var selectedEmployerID = "all" {
+        didSet {
+            if fieldInstitutionsOnly && !isFieldInstitutionFilterAvailable { fieldInstitutionsOnly = false }
+            displayedCache = nil
+            reconcileExpanded()
+        }
+    }
     @Published var selectedRegionID = "all" { didSet { displayedCache = nil; reconcileExpanded() } }
+
+    var isFieldInstitutionFilterAvailable: Bool {
+        OrganizationRegistry.supportsFieldInstitutionFilter(for: selectedEmployerID)
+    }
 
     private let apiClient: any HHVacancyAPIClient
     private let employerStore: any EmployerConfigurationStoring

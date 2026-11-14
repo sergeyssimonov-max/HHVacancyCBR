@@ -167,6 +167,67 @@ extension HHVacancyCBRTests {
             XCTAssertFalse(TrudvsemVacancy(dto: dto, organization: OrganizationRegistry.all[4], observationIDs: []).fieldInstitution.isMember)
         }
     }
+
+    func testTrudSnapshotDiscardsImpossibleFieldCategoryAndPreservesSourceData() throws {
+        for organization in OrganizationRegistry.all {
+            let dto = try XCTUnwrap(TrudFixture.page([
+                TrudFixture.row(organization.id, org: organization, title: "Кассир ПУ Инское")
+            ]).vacancies.first)
+            let original = TrudvsemVacancy(dto: dto, organization: organization, observationIDs: ["observation"])
+            XCTAssertEqual(original.fieldInstitution.isMember, organization.id == "bank_of_russia")
+            var json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(original)) as? [String: Any])
+            json["fieldInstitution"] = ["isMember": true, "reason": "Сохраненная отметка"]
+            let restored = try JSONDecoder().decode(TrudvsemVacancy.self, from: JSONSerialization.data(withJSONObject: json))
+            XCTAssertEqual(restored.fieldInstitution.isMember, organization.id == "bank_of_russia", organization.name)
+            if organization.id != "bank_of_russia" { XCTAssertNil(restored.fieldInstitution.reason) }
+            XCTAssertEqual(restored.dto, original.dto)
+            XCTAssertEqual(restored.organizationKey, original.organizationKey)
+            XCTAssertEqual(restored.observationIDs, original.observationIDs)
+            XCTAssertEqual(restored, try JSONDecoder().decode(TrudvsemVacancy.self, from: JSONEncoder().encode(restored)))
+        }
+    }
+
+    @MainActor
+    func testTrudFieldFilterResetsForEveryOtherOrganizationAndKeepsExportConsistent() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let values = try OrganizationRegistry.all.map { organization in
+            let dto = try XCTUnwrap(TrudFixture.page([
+                TrudFixture.row(organization.id, org: organization, title: "Кассир ПУ Инское")
+            ]).vacancies.first)
+            return TrudvsemVacancy(dto: dto, organization: organization, observationIDs: [])
+        } + [try TrudFixture.documented("ordinary")]
+        let store = TrudvsemSnapshotStore(configuredURL: directory.appendingPathComponent("trud.json"))
+        try store.save(.init(version: 1, vacancies: values, metrics: [], updatedAt: .distantPast))
+        let model = TrudvsemViewModel(client: TrudScriptedClient([]), store: store)
+        model.load()
+        for selection in ["all", "bank_of_russia"] {
+            model.selectedEmployerID = selection
+            XCTAssertTrue(model.isFieldInstitutionFilterAvailable)
+            model.fieldInstitutionsOnly = true
+            XCTAssertEqual(model.displayedResults.map(\.dto.id), ["bank_of_russia"])
+            XCTAssertEqual(model.filters["Категория"], "Полевые учреждения")
+            model.selectedRegionID = "missing"
+            XCTAssertTrue(model.displayedResults.isEmpty)
+            model.selectedRegionID = "all"
+        }
+        for organization in OrganizationRegistry.all where organization.id != "bank_of_russia" {
+            model.selectedEmployerID = "all"
+            model.fieldInstitutionsOnly = true
+            model.selectedEmployerID = organization.id
+            XCTAssertFalse(model.isFieldInstitutionFilterAvailable)
+            XCTAssertFalse(model.fieldInstitutionsOnly)
+            XCTAssertEqual(model.displayedResults.map(\.dto.id), [organization.id])
+            model.fieldInstitutionsOnly = true
+            XCTAssertFalse(model.fieldInstitutionsOnly)
+            XCTAssertEqual(model.filters["Категория"], "Все вакансии")
+            XCTAssertFalse(try XCTUnwrap(model.displayedResults.first).fieldInstitution.isMember)
+        }
+        model.selectedEmployerID = "bank_of_russia"
+        XCTAssertTrue(model.isFieldInstitutionFilterAvailable)
+        XCTAssertFalse(model.fieldInstitutionsOnly)
+        XCTAssertEqual(Set(model.displayedResults.map(\.dto.id)), ["bank_of_russia", "ordinary"])
+    }
     @MainActor
     func testTrudDisplayCacheInvalidatesAfterFiltersAndRefresh() async throws {
         let store = TrudvsemSnapshotStore(configuredURL: temporaryDirectory().appendingPathComponent("cache.json"))

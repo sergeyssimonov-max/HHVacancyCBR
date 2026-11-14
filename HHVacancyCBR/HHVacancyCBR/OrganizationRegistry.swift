@@ -14,6 +14,9 @@ struct Organization: Identifiable, Codable, Equatable, Sendable {
     let ogrn: String
     let hhEmployerIDs: [String]
     let sources: [String]
+
+    /// Field institutions belong to the Bank of Russia itself (86-FZ, Articles 83 and 86).
+    var hasFieldInstitutions: Bool { id == "bank_of_russia" }
 }
 
 enum OrganizationRegistry {
@@ -39,6 +42,10 @@ enum OrganizationRegistry {
         }
     }
 
+    static func supportsFieldInstitutionFilter(for organizationID: String) -> Bool {
+        organizationID == "all" || all.contains { $0.id == organizationID && $0.hasFieldInstitutions }
+    }
+
     static func supportsHH(_ employer: EmployerConfigurationEntry) -> Bool {
         guard let key = employer.organizationKey, let organization = all.first(where: { $0.id == key }) else { return true }
         return !organization.hhEmployerIDs.isEmpty
@@ -46,7 +53,7 @@ enum OrganizationRegistry {
 
     static func key(forHH id: String) -> String {
         if let org = all.first(where: { $0.hhEmployerIDs.contains(id) }) { return org.id }
-        if FieldInstitutionClassifier.registry.contains(where: { $0.employerIDs.contains(id) }) { return "bank_of_russia" }
+        if FieldInstitutionClassifier.isEligibleHHEmployer(id) { return "bank_of_russia" }
         return "hh_account_" + id
     }
 }

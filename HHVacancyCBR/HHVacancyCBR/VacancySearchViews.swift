@@ -46,6 +46,8 @@ enum VacancySearchViews {
                 }
                 .labelsHidden()
                 .frame(width: 190, height: ToolbarMetrics.controlHeight)
+                .disabled(!viewModel.isFieldInstitutionFilterAvailable)
+                .help("Полевые учреждения относятся только к самому Банку России.")
                 .accessibilityIdentifier("categoryFilterPicker")
 
                 Picker("Работодатель", selection: $viewModel.selectedEmployerID) {
@@ -108,7 +110,8 @@ enum VacancySearchViews {
             HStack(spacing: 12) {
                 VacancyStatusSummary(
                     vacancyCountMessage: viewModel.displayedVacancyCountMessage,
-                    fieldInstitutionCount: viewModel.displayedResults.filter(\.isFieldInstitution).count,
+                    fieldInstitutionCount: viewModel.isFieldInstitutionFilterAvailable
+                        ? viewModel.displayedResults.filter(\.isFieldInstitution).count : nil,
                     updatedAtMessage: viewModel.updatedAtMessage,
                     loadingEmployerName: viewModel.isLoading ? viewModel.currentEmployerName : nil)
                 Spacer()

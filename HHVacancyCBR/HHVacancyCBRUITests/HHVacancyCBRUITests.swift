@@ -245,6 +245,42 @@ final class HHVacancyCBRUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Полное описание вакансии."].waitForExistence(timeout: 5))
     }
 
+    func testFieldFilterBelongsOnlyToBankOfRussiaOnBothSources() {
+        let app = launch()
+        app.buttons["searchVacanciesButton"].click()
+        XCTAssertTrue(app.staticTexts["vacancyTitle.ui-1"].waitForExistence(timeout: 8))
+        choose("Полевые учреждения", from: "categoryFilterPicker", in: app)
+        choose("НСПК", from: "employerFilterPicker", in: app)
+        let category = app.descendants(matching: .any)["categoryFilterPicker"]
+        XCTAssertFalse(category.isEnabled)
+        XCTAssertTrue(app.staticTexts["vacancyTitle.ui-3"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["fieldInstitutionCount"].exists)
+
+        app.radioButtons["trudvsem.ru"].click()
+        XCTAssertTrue(app.buttons["refreshTrudvsemButton"].waitForExistence(timeout: 5))
+        XCTAssertTrue(category.isEnabled)
+        app.buttons["refreshTrudvsemButton"].click()
+        XCTAssertTrue(app.staticTexts["Администратор баз данных"].waitForExistence(timeout: 8))
+        XCTAssertTrue(waitForLabel("Обновить", of: app.buttons["refreshTrudvsemButton"]))
+        choose("Полевые учреждения", from: "categoryFilterPicker", in: app)
+        choose("НСИС", from: "employerFilterPicker", in: app)
+        XCTAssertFalse(category.isEnabled)
+        XCTAssertTrue(app.staticTexts["Администратор баз данных"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["fieldInstitutionCount"].exists)
+        choose("Банк России", from: "employerFilterPicker", in: app)
+        XCTAssertTrue(category.isEnabled)
+        XCTAssertTrue(app.staticTexts["fieldInstitutionCount"].exists)
+        choose("Полевые учреждения", from: "categoryFilterPicker", in: app)
+
+        app.radioButtons["hh.ru"].click()
+        XCTAssertFalse(category.isEnabled, "The other tab keeps its own employer and category state")
+        XCTAssertTrue(app.staticTexts["vacancyTitle.ui-3"].exists)
+        choose("Все работодатели", from: "employerFilterPicker", in: app)
+        XCTAssertTrue(category.isEnabled)
+        XCTAssertTrue(app.staticTexts["fieldInstitutionCount"].exists)
+        XCTAssertEqual(app.staticTexts["displayedVacancyCount"].value as? String, "Вакансий: 3")
+    }
+
     func testTrudTimeoutKeepsRowsAndTimestampThenRecovers() throws {
         let app = launch(scenario: "trud-timeout-recovery")
         app.radioButtons["trudvsem.ru"].click()

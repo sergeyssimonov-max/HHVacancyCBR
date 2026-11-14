@@ -127,10 +127,24 @@ struct TrudvsemVacancy: Codable, Identifiable, Equatable, Sendable {
     init(dto: TrudvsemVacancyDTO, organization: Organization, observationIDs: [String]) {
         self.dto = dto; organizationKey = organization.id; self.observationIDs = observationIDs
         fieldInstitution = FieldInstitutionClassifier.classifyWorkplace(
-            eligible: organization.id == "bank_of_russia",
+            eligible: organization.hasFieldInstitutions,
             workplaceFields: [dto.title, dto.raw["company"]["name"].text],
             descriptions: [dto.raw["duty"].text, dto.raw["addresses"].readable],
             provenance: "trudvsem.ru, ИНН \(organization.inn), companycode \(dto.companyCode)")
+    }
+
+    private enum CodingKeys: String, CodingKey { case dto, organizationKey, observationIDs, fieldInstitution }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        dto = try container.decode(TrudvsemVacancyDTO.self, forKey: .dto)
+        let key = try container.decode(String.self, forKey: .organizationKey)
+        organizationKey = key
+        observationIDs = try container.decode([String].self, forKey: .observationIDs)
+        let savedClassification = try container.decode(FieldInstitutionClassification.self, forKey: .fieldInstitution)
+        // Keep the snapshot format and source data; discard an impossible cached category.
+        let eligible = OrganizationRegistry.all.contains { $0.id == key && $0.hasFieldInstitutions }
+        fieldInstitution = eligible ? savedClassification : .unidentified
     }
     var context: DocumentContext {
         .init(kind: "Сведения о вакансии", vacancyIDs: [id], observationIDs: observationIDs, source: .trudvsem)
