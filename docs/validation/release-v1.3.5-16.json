@@ -74,5 +74,15 @@
       "head_sha": "92934ec6561682325cbc6e8ea4089ae7428e7e59",
       "conclusion": "success"
     }
-  ]
+  ],
+  "subsequent_user_refresh": {
+    "confirmed_by_owner": true,
+    "hh_saved_count": 51,
+    "trudvsem_saved_count": 34,
+    "hh_file_modified_moscow": "2026-11-14T19:44:42",
+    "trudvsem_file_modified_moscow": "2026-11-14T19:43:58",
+    "snapshots_preserved": true,
+    "agent_live_ui_test": false,
+    "new_snapshots_restart_tested": false
+  }
 }
