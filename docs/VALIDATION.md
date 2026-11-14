@@ -16,7 +16,11 @@
 
 ## Текущий стабильный релиз
 
-[GitHub Release v1.3.4-15](https://github.com/sergeyssimonov-max/HHVacancyCBR/releases/tag/v1.3.4-15) опубликован 14.11.2026 и отмечен **Latest**. Он содержит установщик и `.sha256`, скачанные после публикации и побайтово сверенные с проверенным пакетом. Полная сводка — [release-v1.3.4-15.json](validation/release-v1.3.4-15.json).
+Выпущен и установлен **1.3.5 (16)**; [отчёт выпуска и установки](RELEASE_1.3.5.md) фиксирует точный SHA, CI, проверку пустого установленного приложения и скачанных файлов GitHub/Dropbox.
+
+## Историческая проверка выпуска 1.3.4 (15)
+
+[GitHub Release v1.3.4-15](https://github.com/sergeyssimonov-max/HHVacancyCBR/releases/tag/v1.3.4-15) опубликован 14.11.2026 и при публикации отмечен **Latest**. Он содержит установщик и `.sha256`, скачанные после публикации и побайтово сверенные с проверенным пакетом. Полная сводка — [release-v1.3.4-15.json](validation/release-v1.3.4-15.json).
 
 - Исходный commit: [b70cd734355f774948c1d36ba31e257c0b4157fd](https://github.com/sergeyssimonov-max/HHVacancyCBR/commit/b70cd734355f774948c1d36ba31e257c0b4157fd). SHA объекта аннотированного тега: `d86e01e29f7ea5edf9f84b3abff930c830160ef7`; это не SHA коммита.
 - [macOS CI коммита](https://github.com/sergeyssimonov-max/HHVacancyCBR/actions/runs/43610911652/attempts/2), [macOS CI тега](https://github.com/sergeyssimonov-max/HHVacancyCBR/actions/runs/43612406060) и [Release DMG](https://github.com/sergeyssimonov-max/HHVacancyCBR/actions/runs/43612406026) успешны именно для `b70cd73`. Первый UI-прогон был автоматически отменён последующим push в main; повтор завершился успешно без изменения кода или проверок.
