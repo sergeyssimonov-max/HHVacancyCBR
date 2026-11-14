@@ -24,6 +24,7 @@ jobs:
         run: |
           test "$(uname -m)" = arm64
           python3 scripts/verify_independence.py
+          python3 scripts/verify_project_sources.py
       - name: List project
         working-directory: HHVacancyCBR
         run: xcodebuild -project HHVacancyCBR.xcodeproj -list

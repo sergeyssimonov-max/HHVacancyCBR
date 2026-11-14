@@ -9,6 +9,201 @@ final class HHVacancyCBRUITests: XCTestCase {
         return app
     }
 
+    func testOptInInstalledTrudLiveRefreshButton() throws {
+        let environment = ProcessInfo.processInfo.environment
+        try XCTSkipUnless(environment["HHVACANCYCBR_RUN_INSTALLED_TRUD_LIVE_UI"] == "1",
+            "Opt-in UI check of /Applications/ЦБВакансии.app using real API and its normal snapshot.")
+        let installedURL = URL(fileURLWithPath: "/Applications/ЦБВакансии.app", isDirectory: true)
+        let installed = try XCTUnwrap(Bundle(url: installedURL))
+        XCTAssertEqual(installed.bundleIdentifier, "local.sergey.HHVacancyCBR")
+        XCTAssertEqual(installed.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String, "1.3.4")
+        XCTAssertEqual(installed.object(forInfoDictionaryKey: "CFBundleVersion") as? String, "15")
+        let snapshotPath = try XCTUnwrap(environment["HHVACANCYCBR_LIVE_SNAPSHOT_PATH"])
+        let snapshotURL = URL(fileURLWithPath: snapshotPath)
+        func readSnapshot() throws -> [String: Any] {
+            try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: snapshotURL)) as? [String: Any])
+        }
+        let beforeDate: Double?
+        if FileManager.default.fileExists(atPath: snapshotPath) {
+            beforeDate = try XCTUnwrap(readSnapshot()["updatedAt"] as? Double)
+        } else {
+            beforeDate = nil
+        }
+        let app = XCUIApplication()
+        // The xctestrun target is the installed Release app; explicitly disable fixtures as well.
+        app.launchEnvironment["HHVACANCYCBR_UI_TEST_MODE"] = "0"
+        app.launchEnvironment["HHVACANCYCBR_UI_TEST_SCENARIO"] = ""
+        app.launch()
+        let source = app.radioButtons["trudvsem.ru"]
+        XCTAssertTrue(source.waitForExistence(timeout: 10))
+        source.click()
+        let refresh = app.buttons["refreshTrudvsemButton"]
+        XCTAssertTrue(refresh.waitForExistence(timeout: 10))
+        XCTAssertTrue(waitForLabel("Обновить", of: refresh))
+        let timestamp = app.staticTexts["vacancyUpdateStatus"]
+        if beforeDate != nil {
+            XCTAssertTrue(timestamp.exists)
+        } else {
+            XCTAssertFalse(timestamp.exists, "A clean install must not show a saved update date")
+            XCTAssertEqual(app.staticTexts["displayedVacancyCount"].value as? String, "Вакансий: 0")
+        }
+        print("INSTALLED LIVE UI before=\(timestamp.exists ? String(describing: timestamp.value) : "no saved snapshot") count=\(app.staticTexts["displayedVacancyCount"].value ?? "")")
+        let initial = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        initial.name = "Installed trudvsem before refresh"; initial.lifetime = .keepAlways; add(initial)
+        let clickedAt = Date().timeIntervalSinceReferenceDate
+        refresh.click()
+        XCTAssertTrue(waitForLabel("Отменить", of: refresh, timeout: 10), "The real toolbar action must start a refresh")
+        XCTAssertTrue(app.staticTexts["vacancyExtractionStatus"].exists)
+        let loading = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        loading.name = "Installed trudvsem loading after button click"; loading.lifetime = .keepAlways; add(loading)
+        XCTAssertTrue(waitForLabel("Обновить", of: refresh, timeout: 180), "The refresh must finish")
+        let finished = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        finished.name = "Installed trudvsem successful live refresh"; finished.lifetime = .keepAlways; add(finished)
+        let error = app.staticTexts["trudRefreshError"]
+        XCTAssertFalse(error.exists, error.exists ? String(describing: error.value) : "")
+        XCTAssertFalse(app.staticTexts["vacancyExtractionStatus"].exists)
+        let after = try readSnapshot()
+        let afterDate = try XCTUnwrap(after["updatedAt"] as? Double)
+        let vacancies = try XCTUnwrap(after["vacancies"] as? [[String: Any]])
+        let metrics = try XCTUnwrap(after["metrics"] as? [[String: Any]])
+        if let beforeDate { XCTAssertGreaterThan(afterDate, beforeDate) }
+        XCTAssertGreaterThanOrEqual(afterDate, clickedAt)
+        XCTAssertFalse(vacancies.isEmpty)
+        XCTAssertEqual(Set(metrics.compactMap { $0["organizationKey"] as? String }),
+            Set(["bank_of_russia", "rosinkas", "nspk", "rnpk", "nsis", "uk_fkbs"]))
+        XCTAssertTrue(metrics.allSatisfy { ($0["declared"] as? Int) == ($0["unique"] as? Int) })
+        XCTAssertEqual(metrics.compactMap { $0["unique"] as? Int }.reduce(0, +), vacancies.count)
+        XCTAssertEqual(app.staticTexts["displayedVacancyCount"].value as? String, "Вакансий: \(vacancies.count)")
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ru_RU")
+        formatter.dateFormat = "dd.MM.yyyy, HH:mm"
+        let expectedTimestamp = "Обновлено: " + formatter.string(from: Date(timeIntervalSinceReferenceDate: afterDate))
+        XCTAssertEqual(timestamp.value as? String, expectedTimestamp)
+        XCTAssertTrue(app.buttons["exportBulkPDFButton"].isEnabled)
+        XCTAssertTrue(refresh.isEnabled)
+        print("INSTALLED LIVE UI success count=\(vacancies.count) timestamp=\(expectedTimestamp) persistedAfterClick=true employers=\(metrics.count)")
+
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(source.waitForExistence(timeout: 10))
+        source.click()
+        XCTAssertTrue(refresh.waitForExistence(timeout: 10))
+        XCTAssertTrue(waitForLabel("Обновить", of: refresh))
+        XCTAssertEqual(app.staticTexts["displayedVacancyCount"].value as? String, "Вакансий: \(vacancies.count)")
+        XCTAssertEqual(timestamp.value as? String, expectedTimestamp)
+        XCTAssertFalse(error.exists)
+        XCTAssertEqual(try readSnapshot()["updatedAt"] as? Double, afterDate,
+            "Relaunch must read the saved snapshot without inventing a new update")
+        let reopened = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        reopened.name = "Installed trudvsem persisted after relaunch"; reopened.lifetime = .keepAlways; add(reopened)
+        print("INSTALLED LIVE UI relaunch success count=\(vacancies.count) unchangedTimestamp=true")
+    }
+
+    func testOptInInstalledHHLiveRefreshAndBothSourcesPersist() throws {
+        let environment = ProcessInfo.processInfo.environment
+        try XCTSkipUnless(environment["HHVACANCYCBR_RUN_INSTALLED_HH_LIVE_UI"] == "1",
+            "Opt-in real hh.ru refresh in the installed app; verifies both normal snapshots after relaunch.")
+        continueAfterFailure = false
+        let installed = try XCTUnwrap(Bundle(url: URL(fileURLWithPath: "/Applications/ЦБВакансии.app")))
+        XCTAssertEqual(installed.bundleIdentifier, "local.sergey.HHVacancyCBR")
+        XCTAssertEqual(installed.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String, "1.3.4")
+        XCTAssertEqual(installed.object(forInfoDictionaryKey: "CFBundleVersion") as? String, "15")
+        let root = URL(fileURLWithPath: try XCTUnwrap(environment["HHVACANCYCBR_LIVE_DATA_PATH"]))
+        let hhURL = root.appendingPathComponent("vacancies.json")
+        let trudURL = root.appendingPathComponent("vacancies-trudvsem.json")
+        func object(_ data: Data) throws -> [String: Any] {
+            try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        }
+        let trudBefore = try Data(contentsOf: trudURL)
+        let trud = try object(trudBefore)
+        let trudCount = try XCTUnwrap(trud["vacancies"] as? [[String: Any]]).count
+        XCTAssertGreaterThan(trudCount, 0)
+        let trudDate = Date(timeIntervalSinceReferenceDate: try XCTUnwrap(trud["updatedAt"] as? Double))
+        let hhBefore = FileManager.default.fileExists(atPath: hhURL.path) ? try Data(contentsOf: hhURL) : nil
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ru_RU")
+        formatter.dateFormat = "dd.MM.yyyy, HH:mm"
+        func timestamp(_ date: Date) -> String { "Обновлено: " + formatter.string(from: date) }
+        let app = XCUIApplication()
+        app.launchEnvironment["HHVACANCYCBR_UI_TEST_MODE"] = "0"
+        app.launchEnvironment["HHVACANCYCBR_UI_TEST_SCENARIO"] = ""
+        func screenshot(_ name: String) {
+            let attachment = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+            attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
+        }
+        func checkVisibleSnapshot(count: Int, date: Date, refreshIdentifier: String) {
+            let refresh = app.buttons[refreshIdentifier]
+            XCTAssertTrue(refresh.waitForExistence(timeout: 10))
+            XCTAssertTrue(waitForLabel("Обновить", of: refresh))
+            let expectedDate = timestamp(date)
+            let loaded = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "value == %@", expectedDate),
+                object: app.staticTexts["vacancyUpdateStatus"])
+            XCTAssertEqual(XCTWaiter.wait(for: [loaded], timeout: 10), .completed)
+            XCTAssertEqual(app.staticTexts["displayedVacancyCount"].value as? String, "Вакансий: \(count)")
+            XCTAssertFalse(app.staticTexts["vacancyExtractionStatus"].exists)
+            XCTAssertFalse(app.descendants(matching: .any)["collectionWarning"].exists)
+            XCTAssertFalse(app.staticTexts["trudRefreshError"].exists)
+            XCTAssertTrue(app.buttons["exportBulkPDFButton"].isEnabled)
+            XCTAssertTrue(refresh.isEnabled)
+        }
+
+        app.launch()
+        XCTAssertTrue(app.radioButtons["trudvsem.ru"].waitForExistence(timeout: 10))
+        app.radioButtons["trudvsem.ru"].click()
+        checkVisibleSnapshot(count: trudCount, date: trudDate, refreshIdentifier: "refreshTrudvsemButton")
+        screenshot("Installed trudvsem before HH refresh")
+        app.radioButtons["hh.ru"].click()
+        let refresh = app.buttons["searchVacanciesButton"]
+        XCTAssertTrue(refresh.waitForExistence(timeout: 10))
+        XCTAssertTrue(waitForLabel("Обновить", of: refresh))
+        if hhBefore == nil {
+            XCTAssertEqual(app.staticTexts["displayedVacancyCount"].value as? String, "Вакансий: 0")
+            XCTAssertFalse(app.staticTexts["vacancyUpdateStatus"].exists)
+        }
+        screenshot("Installed HH before refresh")
+        let clickedAt = Date()
+        print("INSTALLED HH LIVE click=\(ISO8601DateFormatter().string(from: clickedAt)) trudCount=\(trudCount) hadHHSnapshot=\(hhBefore != nil)")
+        refresh.click()
+        XCTAssertTrue(waitForLabel("Отменить", of: refresh, timeout: 10))
+        screenshot("Installed HH loading after button click")
+        let finished = waitForLabel("Обновить", of: refresh, timeout: 600)
+        screenshot("Installed HH live refresh result")
+        XCTAssertTrue(finished, "The real hh.ru refresh must finish")
+        XCTAssertFalse(app.descendants(matching: .any)["collectionWarning"].exists)
+        XCTAssertFalse(app.staticTexts["Не удалось загрузить вакансии"].exists)
+        let hhAfter = try Data(contentsOf: hhURL)
+        let hh = try object(hhAfter)
+        let vacancies = try XCTUnwrap(hh["vacancies"] as? [[String: Any]])
+        let issues = try XCTUnwrap(hh["issues"] as? [[String: Any]])
+        let savedDate = try XCTUnwrap(ISO8601DateFormatter().date(from: try XCTUnwrap(hh["updatedAt"] as? String)))
+        XCTAssertGreaterThanOrEqual(savedDate.timeIntervalSince1970, floor(clickedAt.timeIntervalSince1970))
+        XCTAssertFalse(vacancies.isEmpty)
+        XCTAssertTrue(issues.isEmpty, "The hh.ru collection must be complete")
+        let ids = vacancies.compactMap { ($0["summary"] as? [String: Any])?["id"] as? String }
+        XCTAssertEqual(Set(ids).count, vacancies.count)
+        if let hhBefore { XCTAssertNotEqual(hhAfter, hhBefore) }
+        checkVisibleSnapshot(count: vacancies.count, date: savedDate, refreshIdentifier: "searchVacanciesButton")
+        XCTAssertEqual(try Data(contentsOf: trudURL), trudBefore, "hh.ru refresh must preserve the entire trudvsem snapshot")
+        print("INSTALLED HH LIVE success count=\(vacancies.count) timestamp=\(timestamp(savedDate)) issues=0 trudUnchanged=true")
+
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.radioButtons["hh.ru"].waitForExistence(timeout: 10))
+        app.radioButtons["hh.ru"].click()
+        checkVisibleSnapshot(count: vacancies.count, date: savedDate, refreshIdentifier: "searchVacanciesButton")
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@", "vacancyTitle.")).firstMatch.exists)
+        screenshot("Installed HH persisted after relaunch")
+        app.radioButtons["trudvsem.ru"].click()
+        checkVisibleSnapshot(count: trudCount, date: trudDate, refreshIdentifier: "refreshTrudvsemButton")
+        screenshot("Installed trudvsem persisted after HH relaunch")
+        app.radioButtons["hh.ru"].click()
+        checkVisibleSnapshot(count: vacancies.count, date: savedDate, refreshIdentifier: "searchVacanciesButton")
+        XCTAssertEqual(try Data(contentsOf: hhURL), hhAfter, "Relaunch must preserve hh.ru snapshot bytes")
+        XCTAssertEqual(try Data(contentsOf: trudURL), trudBefore, "Relaunch must preserve trudvsem snapshot bytes")
+        print("INSTALLED BOTH SOURCES relaunch success hh=\(vacancies.count) trud=\(trudCount) bothSnapshotsByteIdentical=true")
+    }
+
     func testSourcesHaveIndependentRefreshAndPreserveHHRows() {
         let app = launch()
         let refresh = app.buttons["searchVacanciesButton"]
@@ -48,6 +243,75 @@ final class HHVacancyCBRUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Банк России"].exists)
         app.buttons["expandVacancy.ui-1"].click()
         XCTAssertTrue(app.staticTexts["Полное описание вакансии."].waitForExistence(timeout: 5))
+    }
+
+    func testTrudTimeoutKeepsRowsAndTimestampThenRecovers() throws {
+        let app = launch(scenario: "trud-timeout-recovery")
+        app.radioButtons["trudvsem.ru"].click()
+        let refresh = app.buttons["refreshTrudvsemButton"]
+        refresh.click()
+        let title = app.staticTexts["Администратор баз данных"]
+        XCTAssertTrue(title.waitForExistence(timeout: 8))
+        XCTAssertTrue(waitForLabel("Обновить", of: refresh))
+        let updatedAt = app.staticTexts["vacancyUpdateStatus"]
+        XCTAssertTrue(updatedAt.exists)
+        let timestamp = try XCTUnwrap(updatedAt.value as? String)
+        XCTAssertTrue(timestamp.hasPrefix("Обновлено:"))
+        refresh.click()
+        let error = app.staticTexts["trudRefreshError"]
+        XCTAssertTrue(error.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForLabel("Обновить", of: refresh))
+        XCTAssertTrue(title.exists)
+        let message = try XCTUnwrap(error.value as? String)
+        XCTAssertTrue(message.contains("не ответил вовремя"))
+        XCTAssertTrue(message.contains("дата обновления не изменилась"))
+        XCTAssertFalse(message.contains("The request timed out"))
+        XCTAssertFalse(message.contains("РОСИНКАС:"))
+        XCTAssertEqual(updatedAt.value as? String, timestamp)
+        XCTAssertTrue(app.buttons["exportBulkPDFButton"].isEnabled)
+        let screenshot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        screenshot.name = "trudvsem timeout preserves saved vacancies"; screenshot.lifetime = .keepAlways; add(screenshot)
+        app.radioButtons["hh.ru"].click()
+        XCTAssertFalse(error.exists)
+        XCTAssertTrue(app.buttons["searchVacanciesButton"].isEnabled)
+        app.radioButtons["trudvsem.ru"].click()
+        XCTAssertTrue(error.exists)
+        refresh.click()
+        XCTAssertTrue(waitForDisappearance(of: error))
+        XCTAssertTrue(waitForLabel("Обновить", of: refresh))
+        XCTAssertTrue(title.exists)
+    }
+
+    func testTrudFirstRunOfflineHasOneClearErrorAndNoFakeSnapshot() throws {
+        let app = launch(scenario: "trud-offline")
+        app.radioButtons["trudvsem.ru"].click()
+        let refresh = app.buttons["refreshTrudvsemButton"]
+        refresh.click()
+        let error = app.staticTexts["trudRefreshError"]
+        XCTAssertTrue(error.waitForExistence(timeout: 5))
+        let message = try XCTUnwrap(error.value as? String)
+        XCTAssertTrue(message.contains("Нет подключения к интернету"))
+        XCTAssertTrue(message.contains("Полная выборка ещё не загружена"))
+        XCTAssertFalse(message.contains("сохранённая"))
+        XCTAssertTrue(app.staticTexts["Не удалось загрузить вакансии."].exists)
+        XCTAssertFalse(app.staticTexts["vacancyUpdateStatus"].exists)
+        XCTAssertFalse(app.buttons["exportBulkPDFButton"].isEnabled)
+        XCTAssertTrue(waitForLabel("Обновить", of: refresh))
+    }
+
+    func testTrudCancelStalledRefreshAndStartAgain() {
+        let app = launch(scenario: "trud-cancel")
+        app.radioButtons["trudvsem.ru"].click()
+        let refresh = app.buttons["refreshTrudvsemButton"]
+        refresh.click()
+        XCTAssertTrue(waitForLabel("Отменить", of: refresh))
+        refresh.click()
+        XCTAssertTrue(waitForLabel("Обновить", of: refresh))
+        XCTAssertFalse(app.staticTexts["trudRefreshError"].exists)
+        refresh.click()
+        XCTAssertTrue(app.staticTexts["Администратор баз данных"].waitForExistence(timeout: 8))
+        XCTAssertTrue(waitForLabel("Обновить", of: refresh))
+        XCTAssertFalse(app.staticTexts["trudRefreshError"].exists)
     }
 
     func testFilteringExpandedVacancyHidesDetailsAndAllowsReopening() {

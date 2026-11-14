@@ -21,7 +21,7 @@ def main():
         assert '/Users/' not in content, f'Absolute local dependency: {path}'
     assert not (ROOT / '.gitmodules').exists(), 'Submodules are not allowed'
     assert not (ROOT / '.git/objects/info/alternates').exists(), 'Shared Git object storage is not allowed'
-    assert not list(APP.glob('employers.legacy-*.json')), 'Legacy employer lists must not ship'
+    assert not list(APP.rglob('employers.legacy-*.json')), 'Legacy employer lists must not ship'
     data = json.loads((APP / 'employers.json').read_text())
     assert data['version'] == 2
     ids = [entry['id'] for entry in data['employers']]
@@ -35,7 +35,7 @@ def main():
     assert keys == ['bank_of_russia', 'rosinkas', 'nspk', 'rnpk', 'nsis', 'uk_fkbs']
     assert len(keys) == len(set(keys))
     assert 'hhEmployerIDs: []' in registry
-    for path in APP.glob('*.swift'):
+    for path in APP.rglob('*.swift'):
         assert not re.search(r'Favorite|Favorites|favorite|favorites|Избранное', path.read_text()), path
     project = (PROJECT / 'HHVacancyCBR.xcodeproj/project.pbxproj').read_text()
     assert 'PRODUCT_BUNDLE_IDENTIFIER = local.sergey.HHVacancyCBR;' in project

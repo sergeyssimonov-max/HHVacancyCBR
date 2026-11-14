@@ -10,10 +10,15 @@ struct TrudvsemViews: View {
             Divider()
             statusBar
             Divider()
-            if let error = viewModel.errorMessage { Text(error).font(.caption).foregroundColor(.red).padding(8).textSelection(.enabled) }
+            if let error = viewModel.errorMessage {
+                Text(error).font(.caption).foregroundColor(.red).padding(8).textSelection(.enabled)
+                    .accessibilityIdentifier("trudRefreshError")
+            }
             if viewModel.displayedResults.isEmpty {
                 VacancyEmptyState(
-                    message: viewModel.updatedAt == nil ? "Загрузите вакансии trudvsem.ru кнопкой «Обновить»." : (viewModel.results.isEmpty ? "Вакансий не найдено." : "По запросу вакансий нет."),
+                    message: viewModel.updatedAt == nil
+                        ? (viewModel.errorMessage == nil ? "Загрузите вакансии trudvsem.ru кнопкой «Обновить»." : "Не удалось загрузить вакансии.")
+                        : (viewModel.results.isEmpty ? "Вакансий не найдено." : "По запросу вакансий нет."),
                     isLoading: viewModel.isLoading)
             } else {
                 ScrollView {

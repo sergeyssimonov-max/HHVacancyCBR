@@ -139,11 +139,36 @@ struct TrudvsemVacancy: Codable, Identifiable, Equatable, Sendable {
 
 enum TrudvsemError: LocalizedError {
     case invalid(String), http(Int), incomplete(String)
+    case network(URLError.Code, retryAfter: Int?)
+
+    var stopsCollection: Bool {
+        switch self {
+        case .network: return true
+        case .http(let status): return [401, 403, 408, 429].contains(status) || (500...599).contains(status)
+        default: return false
+        }
+    }
+
     var errorDescription: String? {
         switch self {
         case .invalid(let text): return "trudvsem.ru: некорректный ответ (\(text))."
         case .http(let code): return "trudvsem.ru: HTTP \(code)."
-        case .incomplete(let text): return "Неполный сбор trudvsem.ru: \(text). Предыдущая выборка сохранена."
+        case .incomplete(let text): return "Неполный сбор trudvsem.ru: \(text)."
+        case .network(let code, let retryAfter):
+            let reason: String
+            switch code {
+            case .timedOut: reason = "Сервер trudvsem.ru не ответил вовремя."
+            case .notConnectedToInternet: reason = "Нет подключения к интернету."
+            case .cannotFindHost, .dnsLookupFailed: reason = "Не удалось найти сервер trudvsem.ru."
+            case .cannotConnectToHost, .networkConnectionLost: reason = "Не удалось установить соединение с trudvsem.ru."
+            case .secureConnectionFailed, .serverCertificateHasBadDate, .serverCertificateUntrusted,
+                 .serverCertificateHasUnknownRoot, .serverCertificateNotYetValid,
+                 .clientCertificateRejected, .clientCertificateRequired:
+                reason = "Не удалось установить защищённое соединение с trudvsem.ru."
+            default: reason = "Сетевая ошибка trudvsem.ru (код \(code.rawValue))."
+            }
+            return reason + " " + (retryAfter.map { "Повторите обновление через \($0) с." }
+                ?? "Проверьте подключение и повторите обновление позже.")
         }
     }
 }

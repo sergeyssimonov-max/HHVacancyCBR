@@ -36,6 +36,40 @@ EF1000000000000000000002 = {isa = PBXBuildFile; fileRef = EF00000000000000000000
 EF1000000000000000000003 = {isa = PBXBuildFile; fileRef = EF0000000000000000000003; };
 EF1000000000000000000004 = {isa = PBXBuildFile; fileRef = EF0000000000000000000004; };
 EF1000000000000000000005 = {isa = PBXBuildFile; fileRef = EF0000000000000000000005; };
+		F1AC7B9F058073AB8FE97DCB /* AppComposition.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE6F3E9C4BC306390224F046 /* AppComposition.swift */; };
+		8620ED049CA4106087B99374 /* FieldInstitutionClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC70CCF352AF5C2EB0946FE1 /* FieldInstitutionClassifier.swift */; };
+		92CD419EC0C35849D18C4FA8 /* TrudvsemCollectionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64C6686080B400C98806F133 /* TrudvsemCollectionService.swift */; };
+		8E724303DFD3ED64C0015C6C /* TrudvsemEmployerConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEE28A411133F65D2CECB25B /* TrudvsemEmployerConfiguration.swift */; };
+		4BF30979C83D613948A37219 /* TrudvsemSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E406538B4757EF4C6CE3A054 /* TrudvsemSnapshotStore.swift */; };
+		8B39EEEF74857E38632B5A6F /* VacancyFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2314E4CC13A53F2003934705 /* VacancyFormatting.swift */; };
+		F11191350644A044F4E3B818 /* VacancyLocation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86EE0F6D4ACE42D21B737829 /* VacancyLocation.swift */; };
+		DA3C5F48867C053118F0A6BF /* VacancyRefreshScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30C5EF0012C66F278DB4CA57 /* VacancyRefreshScheduler.swift */; };
+		CD90FAAAC2F790F71EC3FF97 /* VacancySearchResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D990218E787CCA8E6A8B382 /* VacancySearchResult.swift */; };
+		133DCA6AD643B14356016837 /* VacancyText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACE56D06FD5D2A513CDA82C /* VacancyText.swift */; };
+		DB54F48BAA6C451B6AABA600 /* PDFExportModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13054B6621A54081C23ECDB5 /* PDFExportModels.swift */; };
+		4EDE9F43EBA286015FFF5669 /* PDFExportWorker.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE54DFABAE08C935CBB936B6 /* PDFExportWorker.swift */; };
+		D1158774BA1A003769AB5539 /* PDFFileNameBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F4F091E218CA0D7E8A4EB5E /* PDFFileNameBuilder.swift */; };
+		3353DA1B518EF99F30F3A23E /* PDFNewFileWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 212E9ED5329A1216B7CA4DB7 /* PDFNewFileWriter.swift */; };
+		8C36C92915C59F07AAC3FD07 /* PDFOriginalMaterials.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27F7FA7532B58364BF4076A5 /* PDFOriginalMaterials.swift */; };
+		B39E47B087597973436B3C0D /* VacancyHTMLAttributedText.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2CAB1F443846FF90FFE1FB7 /* VacancyHTMLAttributedText.swift */; };
+		AE5BD3D9DFB6402E8D4D3D3B /* VacancyPDFDocumentBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 635ADA2D7ACBE174DACB9656 /* VacancyPDFDocumentBuilder.swift */; };
+		F022A5F9FD9DF0DF0D9914FC /* VacancyPDFFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12A3DDCCAEF1B6731828D13F /* VacancyPDFFormatter.swift */; };
+		FCBF6DF25A8A777D82F5C5BF /* VacancyPDFStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3E303AFCD40F03376B489BD /* VacancyPDFStyle.swift */; };
+		5837894C0CC66935BFC2B8CA /* VacancyStatisticsReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C25118E0113D85B6BF223034 /* VacancyStatisticsReport.swift */; };
+		FE1E6FC60215DFB1654F56DB /* HHCollectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEB5C7D82C95D0E3729D9066 /* HHCollectionTests.swift */; };
+		5DD614406275F423BD2D734B /* HHNetworkingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B157FCACF24C836A5F5691E /* HHNetworkingTests.swift */; };
+		750DAAB84C72A256D8A28B8A /* LiveAPITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D77A191C4D2BB6EDF26889A /* LiveAPITests.swift */; };
+		BB5114B1BFC3155A12947C46 /* ModelConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E2ED2EA355E88EE1AAB01C6 /* ModelConfigurationTests.swift */; };
+		028635056AE1D7948EDF8DD4 /* PDFExportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F2A8DBC6C8074A448B73BF1 /* PDFExportTests.swift */; };
+		28008D79F8110A4DF739C2AA /* PDFRenderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8845C9846B3AC2E7F9902549 /* PDFRenderingTests.swift */; };
+		0427B600522C4F883E7D1990 /* PDFSourceEvidenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D00E59363477CA29E23A664 /* PDFSourceEvidenceTests.swift */; };
+		C6690D14CF9D5C53992BF05A /* PersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12DD06F4120BA3E6937F13D0 /* PersistenceTests.swift */; };
+		F0DC8E82A83BFE5348434E82 /* PresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D7CD311924CA1B148DE6D50 /* PresentationTests.swift */; };
+		605E64DAD49963DDC877E9D7 /* StatisticsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6BF62062F7F133AD6429B05 /* StatisticsTests.swift */; };
+		5E1287C549A7354AF76FD0C3 /* TestFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07EF88DEDBF16E4781929C43 /* TestFixtures.swift */; };
+		1A1ACDF2D2CD2FF4074230D7 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 476AECDA597D456AA9C4343D /* TestSupport.swift */; };
+		B3FC2A412380324D9180F612 /* TrudReliabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3688C200CA5A5531F2513B7B /* TrudReliabilityTests.swift */; };
+		C3572391494C8E3D9E4898F8 /* TrudvsemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DCCCF4BB3CBFD2D3E8CE489 /* TrudvsemTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -89,6 +123,40 @@ EF0000000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourceco
 EF0000000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrudvsemPDFFormatter.swift; sourceTree = "<group>"; };
 EF0000000000000000000004 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrudvsemViewModel.swift; sourceTree = "<group>"; };
 EF0000000000000000000005 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrudvsemViews.swift; sourceTree = "<group>"; };
+		AE6F3E9C4BC306390224F046 /* AppComposition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppComposition.swift; sourceTree = "<group>"; };
+		FC70CCF352AF5C2EB0946FE1 /* FieldInstitutionClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldInstitutionClassifier.swift; sourceTree = "<group>"; };
+		64C6686080B400C98806F133 /* TrudvsemCollectionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrudvsemCollectionService.swift; sourceTree = "<group>"; };
+		FEE28A411133F65D2CECB25B /* TrudvsemEmployerConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrudvsemEmployerConfiguration.swift; sourceTree = "<group>"; };
+		E406538B4757EF4C6CE3A054 /* TrudvsemSnapshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrudvsemSnapshotStore.swift; sourceTree = "<group>"; };
+		2314E4CC13A53F2003934705 /* VacancyFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VacancyFormatting.swift; sourceTree = "<group>"; };
+		86EE0F6D4ACE42D21B737829 /* VacancyLocation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VacancyLocation.swift; sourceTree = "<group>"; };
+		30C5EF0012C66F278DB4CA57 /* VacancyRefreshScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VacancyRefreshScheduler.swift; sourceTree = "<group>"; };
+		7D990218E787CCA8E6A8B382 /* VacancySearchResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VacancySearchResult.swift; sourceTree = "<group>"; };
+		4ACE56D06FD5D2A513CDA82C /* VacancyText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VacancyText.swift; sourceTree = "<group>"; };
+		13054B6621A54081C23ECDB5 /* PDFExportModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFExportModels.swift; sourceTree = "<group>"; };
+		AE54DFABAE08C935CBB936B6 /* PDFExportWorker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFExportWorker.swift; sourceTree = "<group>"; };
+		5F4F091E218CA0D7E8A4EB5E /* PDFFileNameBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFFileNameBuilder.swift; sourceTree = "<group>"; };
+		212E9ED5329A1216B7CA4DB7 /* PDFNewFileWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFNewFileWriter.swift; sourceTree = "<group>"; };
+		27F7FA7532B58364BF4076A5 /* PDFOriginalMaterials.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFOriginalMaterials.swift; sourceTree = "<group>"; };
+		D2CAB1F443846FF90FFE1FB7 /* VacancyHTMLAttributedText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VacancyHTMLAttributedText.swift; sourceTree = "<group>"; };
+		635ADA2D7ACBE174DACB9656 /* VacancyPDFDocumentBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VacancyPDFDocumentBuilder.swift; sourceTree = "<group>"; };
+		12A3DDCCAEF1B6731828D13F /* VacancyPDFFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VacancyPDFFormatter.swift; sourceTree = "<group>"; };
+		B3E303AFCD40F03376B489BD /* VacancyPDFStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VacancyPDFStyle.swift; sourceTree = "<group>"; };
+		C25118E0113D85B6BF223034 /* VacancyStatisticsReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VacancyStatisticsReport.swift; sourceTree = "<group>"; };
+		EEB5C7D82C95D0E3729D9066 /* HHCollectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HHCollectionTests.swift; sourceTree = "<group>"; };
+		2B157FCACF24C836A5F5691E /* HHNetworkingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HHNetworkingTests.swift; sourceTree = "<group>"; };
+		0D77A191C4D2BB6EDF26889A /* LiveAPITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveAPITests.swift; sourceTree = "<group>"; };
+		8E2ED2EA355E88EE1AAB01C6 /* ModelConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelConfigurationTests.swift; sourceTree = "<group>"; };
+		6F2A8DBC6C8074A448B73BF1 /* PDFExportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFExportTests.swift; sourceTree = "<group>"; };
+		8845C9846B3AC2E7F9902549 /* PDFRenderingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFRenderingTests.swift; sourceTree = "<group>"; };
+		7D00E59363477CA29E23A664 /* PDFSourceEvidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFSourceEvidenceTests.swift; sourceTree = "<group>"; };
+		12DD06F4120BA3E6937F13D0 /* PersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceTests.swift; sourceTree = "<group>"; };
+		3D7CD311924CA1B148DE6D50 /* PresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresentationTests.swift; sourceTree = "<group>"; };
+		C6BF62062F7F133AD6429B05 /* StatisticsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsTests.swift; sourceTree = "<group>"; };
+		07EF88DEDBF16E4781929C43 /* TestFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestFixtures.swift; sourceTree = "<group>"; };
+		476AECDA597D456AA9C4343D /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
+		3688C200CA5A5531F2513B7B /* TrudReliabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrudReliabilityTests.swift; sourceTree = "<group>"; };
+		2DCCCF4BB3CBFD2D3E8CE489 /* TrudvsemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrudvsemTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -139,6 +207,26 @@ EF0000000000000000000005 = {isa = PBXFileReference; lastKnownFileType = sourceco
 		14C76CC52FF9B91E00CF4748 /* HHVacancyCBR */ = {
 			isa = PBXGroup;
 			children = (
+				C25118E0113D85B6BF223034 /* VacancyStatisticsReport.swift */,
+				B3E303AFCD40F03376B489BD /* VacancyPDFStyle.swift */,
+				12A3DDCCAEF1B6731828D13F /* VacancyPDFFormatter.swift */,
+				635ADA2D7ACBE174DACB9656 /* VacancyPDFDocumentBuilder.swift */,
+				D2CAB1F443846FF90FFE1FB7 /* VacancyHTMLAttributedText.swift */,
+				27F7FA7532B58364BF4076A5 /* PDFOriginalMaterials.swift */,
+				212E9ED5329A1216B7CA4DB7 /* PDFNewFileWriter.swift */,
+				5F4F091E218CA0D7E8A4EB5E /* PDFFileNameBuilder.swift */,
+				AE54DFABAE08C935CBB936B6 /* PDFExportWorker.swift */,
+				13054B6621A54081C23ECDB5 /* PDFExportModels.swift */,
+				4ACE56D06FD5D2A513CDA82C /* VacancyText.swift */,
+				7D990218E787CCA8E6A8B382 /* VacancySearchResult.swift */,
+				30C5EF0012C66F278DB4CA57 /* VacancyRefreshScheduler.swift */,
+				86EE0F6D4ACE42D21B737829 /* VacancyLocation.swift */,
+				2314E4CC13A53F2003934705 /* VacancyFormatting.swift */,
+				E406538B4757EF4C6CE3A054 /* TrudvsemSnapshotStore.swift */,
+				FEE28A411133F65D2CECB25B /* TrudvsemEmployerConfiguration.swift */,
+				64C6686080B400C98806F133 /* TrudvsemCollectionService.swift */,
+				FC70CCF352AF5C2EB0946FE1 /* FieldInstitutionClassifier.swift */,
+				AE6F3E9C4BC306390224F046 /* AppComposition.swift */,
 				DE0000000000000000000000,
 				DE0000000000000000000001,
 				DE0000000000000000000002,
@@ -181,6 +269,20 @@ EF0000000000000000000000,
 		14C76CD72FF9B91F00CF4748 /* HHVacancyCBRTests */ = {
 			isa = PBXGroup;
 			children = (
+				2DCCCF4BB3CBFD2D3E8CE489 /* TrudvsemTests.swift */,
+				3688C200CA5A5531F2513B7B /* TrudReliabilityTests.swift */,
+				476AECDA597D456AA9C4343D /* TestSupport.swift */,
+				07EF88DEDBF16E4781929C43 /* TestFixtures.swift */,
+				C6BF62062F7F133AD6429B05 /* StatisticsTests.swift */,
+				3D7CD311924CA1B148DE6D50 /* PresentationTests.swift */,
+				12DD06F4120BA3E6937F13D0 /* PersistenceTests.swift */,
+				7D00E59363477CA29E23A664 /* PDFSourceEvidenceTests.swift */,
+				8845C9846B3AC2E7F9902549 /* PDFRenderingTests.swift */,
+				6F2A8DBC6C8074A448B73BF1 /* PDFExportTests.swift */,
+				8E2ED2EA355E88EE1AAB01C6 /* ModelConfigurationTests.swift */,
+				0D77A191C4D2BB6EDF26889A /* LiveAPITests.swift */,
+				2B157FCACF24C836A5F5691E /* HHNetworkingTests.swift */,
+				EEB5C7D82C95D0E3729D9066 /* HHCollectionTests.swift */,
 				14C76CD82FF9B91F00CF4748 /* HHVacancyCBRTests.swift */,
 			);
 			path = HHVacancyCBRTests;
@@ -326,6 +428,26 @@ EF0000000000000000000000,
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5837894C0CC66935BFC2B8CA /* VacancyStatisticsReport.swift in Sources */,
+				FCBF6DF25A8A777D82F5C5BF /* VacancyPDFStyle.swift in Sources */,
+				F022A5F9FD9DF0DF0D9914FC /* VacancyPDFFormatter.swift in Sources */,
+				AE5BD3D9DFB6402E8D4D3D3B /* VacancyPDFDocumentBuilder.swift in Sources */,
+				B39E47B087597973436B3C0D /* VacancyHTMLAttributedText.swift in Sources */,
+				8C36C92915C59F07AAC3FD07 /* PDFOriginalMaterials.swift in Sources */,
+				3353DA1B518EF99F30F3A23E /* PDFNewFileWriter.swift in Sources */,
+				D1158774BA1A003769AB5539 /* PDFFileNameBuilder.swift in Sources */,
+				4EDE9F43EBA286015FFF5669 /* PDFExportWorker.swift in Sources */,
+				DB54F48BAA6C451B6AABA600 /* PDFExportModels.swift in Sources */,
+				133DCA6AD643B14356016837 /* VacancyText.swift in Sources */,
+				CD90FAAAC2F790F71EC3FF97 /* VacancySearchResult.swift in Sources */,
+				DA3C5F48867C053118F0A6BF /* VacancyRefreshScheduler.swift in Sources */,
+				F11191350644A044F4E3B818 /* VacancyLocation.swift in Sources */,
+				8B39EEEF74857E38632B5A6F /* VacancyFormatting.swift in Sources */,
+				4BF30979C83D613948A37219 /* TrudvsemSnapshotStore.swift in Sources */,
+				8E724303DFD3ED64C0015C6C /* TrudvsemEmployerConfiguration.swift in Sources */,
+				92CD419EC0C35849D18C4FA8 /* TrudvsemCollectionService.swift in Sources */,
+				8620ED049CA4106087B99374 /* FieldInstitutionClassifier.swift in Sources */,
+				F1AC7B9F058073AB8FE97DCB /* AppComposition.swift in Sources */,
 				14C76CC92FF9B91E00CF4748 /* ContentView.swift in Sources */,
 				A10000022FF9BA0000CF4702 /* HHAPIClient.swift in Sources */,
 				A10000022FF9BA0000CF4708 /* HHAuthConfig.swift in Sources */,
@@ -356,6 +478,20 @@ EF1000000000000000000000,
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C3572391494C8E3D9E4898F8 /* TrudvsemTests.swift in Sources */,
+				B3FC2A412380324D9180F612 /* TrudReliabilityTests.swift in Sources */,
+				1A1ACDF2D2CD2FF4074230D7 /* TestSupport.swift in Sources */,
+				5E1287C549A7354AF76FD0C3 /* TestFixtures.swift in Sources */,
+				605E64DAD49963DDC877E9D7 /* StatisticsTests.swift in Sources */,
+				F0DC8E82A83BFE5348434E82 /* PresentationTests.swift in Sources */,
+				C6690D14CF9D5C53992BF05A /* PersistenceTests.swift in Sources */,
+				0427B600522C4F883E7D1990 /* PDFSourceEvidenceTests.swift in Sources */,
+				28008D79F8110A4DF739C2AA /* PDFRenderingTests.swift in Sources */,
+				028635056AE1D7948EDF8DD4 /* PDFExportTests.swift in Sources */,
+				BB5114B1BFC3155A12947C46 /* ModelConfigurationTests.swift in Sources */,
+				750DAAB84C72A256D8A28B8A /* LiveAPITests.swift in Sources */,
+				5DD614406275F423BD2D734B /* HHNetworkingTests.swift in Sources */,
+				FE1E6FC60215DFB1654F56DB /* HHCollectionTests.swift in Sources */,
 				14C76CD92FF9B91F00CF4748 /* HHVacancyCBRTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -514,7 +650,7 @@ EF1000000000000000000000,
 				SWIFT_OBJC_BRIDGING_HEADER = "HHVacancyCBR/Vendor/Streebog/Bridge.h";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 15;
 				DEVELOPMENT_ASSET_PATHS = "\"HHVacancyCBR/Preview Content\"";
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = NO;
@@ -525,7 +661,7 @@ EF1000000000000000000000,
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.3.3;
+				MARKETING_VERSION = 1.3.4;
 				PRODUCT_BUNDLE_IDENTIFIER = local.sergey.HHVacancyCBR;
 				PRODUCT_MODULE_NAME = HHVacancyCBR;
 				PRODUCT_NAME = "ЦБВакансии";
@@ -545,7 +681,7 @@ EF1000000000000000000000,
 				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 15;
 				DEVELOPMENT_ASSET_PATHS = "\"HHVacancyCBR/Preview Content\"";
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -556,7 +692,7 @@ EF1000000000000000000000,
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.3.3;
+				MARKETING_VERSION = 1.3.4;
 				PRODUCT_BUNDLE_IDENTIFIER = local.sergey.HHVacancyCBR;
 				PRODUCT_MODULE_NAME = HHVacancyCBR;
 				PRODUCT_NAME = "ЦБВакансии";
