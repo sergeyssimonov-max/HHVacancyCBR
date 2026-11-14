@@ -22,7 +22,7 @@ git diff --check
 
 Используйте новый путь xcresult для каждого прогона. Полный Debug `test` включает сборку, unit и UI; для отдельного запуска добавьте `-only-testing:HHVacancyCBRTests` или `-only-testing:HHVacancyCBRUITests`. Для UI требуется интерактивный сеанс macOS с разрешением автоматизации. CI `.github/workflows/ci.yml` дополнительно разделяет Debug build/unit, strict Release и UI на jobs; он не устанавливает сборку в `/Applications`.
 
-183 исходных unit-теста находятся в тематических extensions `HHVacancyCBRTests` и классе `PDFSourceEvidenceTests`; 21 UI-сценарий — в двух исходных UI-классах. Их class/selector и `@MainActor` сохранены, выборочные команды остаются рабочими. Проверка inventory:
+В релизном `b70cd73` 183 unit-теста находятся в тематических extensions `HHVacancyCBRTests` и классе `PDFSourceEvidenceTests`; 21 UI-сценарий — в двух исходных UI-классах. При структурном рефакторинге их class/selector и `@MainActor` сохранены, выборочные команды остаются рабочими. Последующие `e5a61db` / `bac67db` добавляют в `main` пять unit-сценариев и один UI-сценарий фильтра полевых учреждений; они не входят в `v1.3.4-15`. Проверка inventory:
 
 ```sh
 python3 scripts/compare_test_inventory.py /path/to/before/source /path/to/after/source

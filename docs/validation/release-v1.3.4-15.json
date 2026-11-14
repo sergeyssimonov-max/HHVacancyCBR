@@ -1,0 +1,170 @@
+{
+  "verified_at": "2026-11-14",
+  "release": {
+    "assets": [
+      {
+        "browser_download_url": "https://github.com/sergeyssimonov-max/HHVacancyCBR/releases/download/v1.3.4-15/HHVacancyCBR_1.3.4_15_macos13_arm64.dmg",
+        "digest": "sha256:f94b96976fba9ae50bc2bc7847e218b235d715b79a58207c2c0c6771c43037f0",
+        "id": 747976435,
+        "name": "HHVacancyCBR_1.3.4_15_macos13_arm64.dmg",
+        "size": 1067453
+      },
+      {
+        "browser_download_url": "https://github.com/sergeyssimonov-max/HHVacancyCBR/releases/download/v1.3.4-15/HHVacancyCBR_1.3.4_15_macos13_arm64.dmg.sha256",
+        "digest": "sha256:9e6381ce29ec6b0a6bc7cdb1e4a4d71ed8be6412196c0248cf0c68648aca9f82",
+        "id": 747976420,
+        "name": "HHVacancyCBR_1.3.4_15_macos13_arm64.dmg.sha256",
+        "size": 106
+      }
+    ],
+    "draft": false,
+    "html_url": "https://github.com/sergeyssimonov-max/HHVacancyCBR/releases/tag/v1.3.4-15",
+    "id": 445408783,
+    "name": "ЦБВакансии 1.3.4 (15)",
+    "prerelease": false,
+    "published_at": "2026-11-14T15:55:53Z",
+    "tag_name": "v1.3.4-15",
+    "target_commitish": "b70cd734355f774948c1d36ba31e257c0b4157fd"
+  },
+  "tag": {
+    "name": "v1.3.4-15",
+    "kind": "annotated",
+    "object_sha": "d86e01e29f7ea5edf9f84b3abff930c830160ef7",
+    "commit_sha": "b70cd734355f774948c1d36ba31e257c0b4157fd"
+  },
+  "package_verification": {
+    "source_commit": "b70cd734355f774948c1d36ba31e257c0b4157fd",
+    "version": "1.3.4",
+    "build": "15",
+    "bundle_id": "local.sergey.HHVacancyCBR",
+    "minimum_macos": "13.0",
+    "architecture": "arm64",
+    "toolchain": {
+      "DTXcode": "1640",
+      "DTXcodeBuild": "16F6",
+      "DTSDKName": "macosx15.5",
+      "DTSDKBuild": "24F74"
+    },
+    "dmg_sha256": "f94b96976fba9ae50bc2bc7847e218b235d715b79a58207c2c0c6771c43037f0",
+    "dmg_size": 1067453,
+    "executable_sha256": "a7525a5e69f5b4117ef17b4a80da9d5bfe9016952857c838db0821249212cb40",
+    "dmg_integrity": "hdiutil verify: VALID",
+    "signature": "ad hoc",
+    "hardened_runtime": true,
+    "code_signature_verification": "codesign --verify --deep --strict: passed",
+    "readme_source_matches_tag": true,
+    "installed": false,
+    "live_api_tested": false
+  },
+  "entitlements": {
+    "values": {
+      "com.apple.security.app-sandbox": true,
+      "com.apple.security.files.user-selected.read-write": true,
+      "com.apple.security.network.client": true
+    },
+    "success": true,
+    "forbidden": []
+  },
+  "notarized": false,
+  "developer_id": false,
+  "ci": [
+    {
+      "url": "https://github.com/sergeyssimonov-max/HHVacancyCBR/actions/runs/43610911652",
+      "head_sha": "b70cd734355f774948c1d36ba31e257c0b4157fd",
+      "conclusion": "success",
+      "attempt": 2,
+      "jobs": [
+        {
+          "name": "ui-tests",
+          "conclusion": "success"
+        },
+        {
+          "name": "release-build",
+          "conclusion": "success"
+        },
+        {
+          "name": "build-and-test",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "url": "https://github.com/sergeyssimonov-max/HHVacancyCBR/actions/runs/43612406060",
+      "head_sha": "b70cd734355f774948c1d36ba31e257c0b4157fd",
+      "conclusion": "success",
+      "attempt": 1,
+      "jobs": [
+        {
+          "name": "ui-tests",
+          "conclusion": "success"
+        },
+        {
+          "name": "build-and-test",
+          "conclusion": "success"
+        },
+        {
+          "name": "release-build",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "url": "https://github.com/sergeyssimonov-max/HHVacancyCBR/actions/runs/43612406026",
+      "head_sha": "b70cd734355f774948c1d36ba31e257c0b4157fd",
+      "conclusion": "success",
+      "attempt": 1,
+      "jobs": [
+        {
+          "name": "package",
+          "conclusion": "success"
+        }
+      ]
+    }
+  ],
+  "local_checks": {
+    "independence": "passed",
+    "xcode_membership": "passed",
+    "python_tests": 35,
+    "python_failures": 0,
+    "diff_check": "passed"
+  },
+  "release_xctest": {
+    "unit": 183,
+    "unit_skipped": 5,
+    "ui": 21,
+    "ui_skipped": 2,
+    "failures": 0,
+    "environment": "GitHub Actions macos-15, clean checkout"
+  },
+  "published_download": {
+    "dmg_byte_identical_to_verified_package": true,
+    "checksum_byte_identical": true,
+    "sha256_check": "OK",
+    "github_asset_digests_match": true
+  },
+  "preserved": {
+    "historical_release_assets_unchanged": true,
+    "existing_annotated_tags_unchanged": 6,
+    "installed_app_and_user_data": {
+      "app": {
+        "files": 7,
+        "identical": true,
+        "added": 0,
+        "removed": 0,
+        "changed": 0
+      },
+      "data": {
+        "files": 125,
+        "identical": true,
+        "added": 0,
+        "removed": 0,
+        "changed": 0
+      }
+    }
+  },
+  "excluded_later_main_commits": [
+    "e5a61dbf3cb09b72733651eb703a8277e888d51f",
+    "bac67db79e5dff356492b415ad8dde757957329a"
+  ],
+  "scope": "Package built from b70cd73; later field-institution behavior changes in main are excluded. Installed app from 633d51f was not replaced. No new live API test or installation was performed."
+}

@@ -16,9 +16,19 @@
 
 ## Текущий стабильный релиз
 
-[GitHub Release v1.3.4-15](https://github.com/sergeyssimonov-max/HHVacancyCBR/releases/tag/v1.3.4-15) содержит установщик и `.sha256`. Его исходный commit определяется аннотированным тегом и README внутри DMG. Релизный SHA, CI, журнал упаковки и хеши опубликованного файла фиксируются в описании выпуска; ссылка на артефакт Actions сама по себе не означает опубликованный релиз.
+[GitHub Release v1.3.4-15](https://github.com/sergeyssimonov-max/HHVacancyCBR/releases/tag/v1.3.4-15) опубликован 14.11.2026 и отмечен **Latest**. Он содержит установщик и `.sha256`, скачанные после публикации и побайтово сверенные с проверенным пакетом. Полная сводка — [release-v1.3.4-15.json](validation/release-v1.3.4-15.json).
+
+- Исходный commit: [b70cd734355f774948c1d36ba31e257c0b4157fd](https://github.com/sergeyssimonov-max/HHVacancyCBR/commit/b70cd734355f774948c1d36ba31e257c0b4157fd). SHA объекта аннотированного тега: `d86e01e29f7ea5edf9f84b3abff930c830160ef7`; это не SHA коммита.
+- [macOS CI коммита](https://github.com/sergeyssimonov-max/HHVacancyCBR/actions/runs/43610911652/attempts/2), [macOS CI тега](https://github.com/sergeyssimonov-max/HHVacancyCBR/actions/runs/43612406060) и [Release DMG](https://github.com/sergeyssimonov-max/HHVacancyCBR/actions/runs/43612406026) успешны именно для `b70cd73`. Первый UI-прогон был автоматически отменён последующим push в main; повтор завершился успешно без изменения кода или проверок.
+- В чистом checkout GitHub Actions: 183 unit-теста (5 opt-in skips), 21 UI-тест (2 opt-in skips), 0 ошибок, Debug и strict Release. Локально дополнительно выполнены independence, exact Xcode membership, 35 Python-тестов и проверка документации.
+- Штатный `scripts/release.sh` собрал чистый `git archive b70cd73` на Xcode 16.4 / SDK 15.5. В образе проверены 1.3.4 (15), arm64, минимальная macOS 13.0, действительная подпись ad hoc, hardened runtime и необходимые entitlements без отладочных прав. `hdiutil verify` успешен; исходный SHA в README совпадает с тегом. Developer ID и нотарификации нет.
+- DMG `HHVacancyCBR_1.3.4_15_macos13_arm64.dmg`: 1 067 453 байта, SHA-256 `f94b96976fba9ae50bc2bc7847e218b235d715b79a58207c2c0c6771c43037f0`. Загруженный `.sha256` даёт `OK`; GitHub asset digest и локальный хеш совпадают.
+
+В `main` сохранены параллельно опубликованные [e5a61db](https://github.com/sergeyssimonov-max/HHVacancyCBR/commit/e5a61dbf3cb09b72733651eb703a8277e888d51f) и [bac67db](https://github.com/sergeyssimonov-max/HHVacancyCBR/commit/bac67db79e5dff356492b415ad8dde757957329a), изменяющие фильтр полевых учреждений и добавляющие проверки; их [CI](https://github.com/sergeyssimonov-max/HHVacancyCBR/actions/runs/43611464861) успешен. По выбору владельца они **не включены в v1.3.4-15**. Документация текущей main отмечает эту границу; опубликованные тег и вложения не заменяются другим содержимым.
 
 Локальный ранее установленный DMG из 633d51f и новый пакет GitHub могут иметь одинаковую версию 1.3.4 (15), но разные commit происхождения, toolchain и SHA-256. Проверяйте каждый файл по его собственной контрольной сумме. Оформление GitHub Release не заменяет установленное приложение и не подтверждает живые API для нового пакета.
+
+На этапе оформления повторно сверены 7 файлов установленного приложения и 125 файлов обычных данных: добавлений, удалений и изменений нет. Все шесть прежних аннотированных тегов и вложения исторического `v1.0-1` сохранены. В его описании обновлена только историческая пометка, ссылка на актуальный выпуск и ссылка на отчёт именно старой версии. Видимость private, доступы и лицензия проекта не менялись.
 
 ## Доступность доказательств
 

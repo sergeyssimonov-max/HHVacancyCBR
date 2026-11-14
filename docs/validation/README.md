@@ -4,6 +4,7 @@
 
 | Материал | Содержание |
 |---|---|
+| [release-v1.3.4-15.json](release-v1.3.4-15.json) | Опубликованный Latest, точные SHA тега и коммита, CI, версия/подпись, checksum и побайтовая проверка скачанных вложений |
 | [refactoring-2026-11-14.json](refactoring-2026-11-14.json) | Повторная проверка доступных baseline-файлов, аудита деклараций, inventory и PDF manifests; SHA-256 исходных журналов |
 | [performance-summary.json](performance-summary.json) | Сохранённые повторные замеры до/после, без нового исполнения при уборке |
 | [ui-validation-summary.json](ui-validation-summary.json) | Исходный внешний сбой UI, полный успешный повтор и fixed-clock comparison без масок |

@@ -1,6 +1,6 @@
 # Рефакторинг для передачи разработки — 14.11.2026
 
-Статус: рефакторинг, документация и предусмотренные локальные проверки завершены. На проверенном наборе сценариев поведение сохранено; ограничения доказательства и вопросы перед публикацией перечислены ниже.
+Статус: рефакторинг, документация и предусмотренные локальные проверки завершены. На проверенном наборе сценариев поведение сохранено; ограничения доказательства и оставшиеся вопросы перечислены ниже. Последующая публикация выпуска описана отдельно от исходного сравнения.
 
 ## Исходная точка и ограничения изменений
 
@@ -92,6 +92,8 @@
 
 - [633d51f](https://github.com/sergeyssimonov-max/HHVacancyCBR/commit/633d51f34adf4ec5da8053d1e62925bc6329d758): [CI успешен](https://github.com/sergeyssimonov-max/HHVacancyCBR/actions/runs/43603859902), из этого точного SHA позднее собран и установлен локальный DMG 1.3.4 (15). Реальные UI-обновления и сохранение после перезапуска — в [отчёте установки](INSTALLATION_CHECK_2026-11-14.md).
 - Документационные [0bbdd54](https://github.com/sergeyssimonov-max/HHVacancyCBR/commit/0bbdd54eecfd624fcc9dfab0a7cd56340450c05f) и [2c2f795](https://github.com/sergeyssimonov-max/HHVacancyCBR/commit/2c2f79587c4187ce46d24c2a7a681d703129b1e5) отправлены; [CI первого](https://github.com/sergeyssimonov-max/HHVacancyCBR/actions/runs/43607946571) и [CI второго](https://github.com/sergeyssimonov-max/HHVacancyCBR/actions/runs/43608796842) успешны. Изменён только отчёт, код приложения совпадает с 633d51f.
+- Оформление документации и архива включено в [b70cd73](https://github.com/sergeyssimonov-max/HHVacancyCBR/commit/b70cd734355f774948c1d36ba31e257c0b4157fd), код приложения относительно 633d51f не менялся. После успешного [CI](https://github.com/sergeyssimonov-max/HHVacancyCBR/actions/runs/43610911652/attempts/2) создан аннотированный `v1.3.4-15`; [штатная упаковка](https://github.com/sergeyssimonov-max/HHVacancyCBR/actions/runs/43612406026) и [CI тега](https://github.com/sergeyssimonov-max/HHVacancyCBR/actions/runs/43612406060) успешны. [GitHub Release](https://github.com/sergeyssimonov-max/HHVacancyCBR/releases/tag/v1.3.4-15) опубликован как Latest; скачанные DMG/checksum проверены. Точные хеши и границы проверки — в [сводке выпуска](validation/release-v1.3.4-15.json). Новый пакет не устанавливался и не объявляется новым живым UI-прогоном.
+- Параллельные `e5a61db` / `bac67db` изменяют поведение фильтра полевых учреждений и сохранены в main отдельными коммитами. Они не относятся к структурному сравнению, не покрываются его утверждением об эквивалентности и не включены в установщик `v1.3.4-15` из b70cd73. Их собственный [CI](https://github.com/sergeyssimonov-max/HHVacancyCBR/actions/runs/43611464861) успешен.
 
 При оформлении проверены доступные исходные материалы: SHA-256 всех 92 baseline-файлов, JSON-аудит 135 деклараций, сохранность 204 тестовых selectors, точное равенство PDF manifests (11 документов / 225 страниц), журналы UI, результаты SDK/performance и реальные installed-app проверки. Небольшие проверенные сводки опубликованы в [validation/](validation/README.md); большие исходные данные, diff, xcresult и изображения сохранены во внешнем архиве с контролем состава и SHA-256.
 
